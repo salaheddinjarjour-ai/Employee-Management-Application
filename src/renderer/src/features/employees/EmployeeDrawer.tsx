@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { X, User, Building, Briefcase, Calendar, ExternalLink, Users, Award, Plane, Clock, DollarSign } from 'lucide-react'
 import PayrollPreview from '../../components/payroll/PayrollPreview'
 import { navigateToPayrollPage } from '../../utils/navigation'
+import { arabicUnit, AR_DAYS } from '../../utils/format'
 
 interface EmployeeProfile {
   employee: {
@@ -392,7 +393,7 @@ export default function EmployeeDrawer({ open, onClose, employeeId }: EmployeeDr
                                     <h4 className="font-medium text-gray-900">{item.leave_type}</h4>
                                     <div className="flex justify-between items-center mt-2">
                                       <span className="text-sm text-gray-600">
-                                        {item.days} يوم
+                                        {item.days} {arabicUnit(Number(item.days), AR_DAYS)}
                                       </span>
                                       <span className="text-xs text-gray-500">
                                         {new Date(item.from_date).toLocaleDateString('ar')} - {new Date(item.to_date).toLocaleDateString('ar')}
@@ -406,7 +407,7 @@ export default function EmployeeDrawer({ open, onClose, employeeId }: EmployeeDr
                                     <h4 className="font-medium text-gray-900">غياب</h4>
                                     <div className="flex justify-between items-center mt-2">
                                       <span className="text-sm text-gray-600">
-                                        {item.days_count} يوم
+                                        {item.days_count} {arabicUnit(Number(item.days_count), AR_DAYS)}
                                       </span>
                                       <span className="text-xs text-gray-500">
                                         {new Date(item.from_date).toLocaleDateString('ar')}

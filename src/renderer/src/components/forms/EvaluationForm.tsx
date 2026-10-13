@@ -2,6 +2,17 @@ import React, { useState, useEffect } from 'react'
 import { Button } from '../ui/Button'
 import { X } from 'lucide-react'
 import { evaluationInputSchema } from '../../schemas/evaluation'
+import { EmployeeSearchSelect } from './EmployeeSearchSelect'
+
+function scoreToRating(score: string | number): string {
+  const n = Number(score)
+  if (isNaN(n) || score === '' || score === null) return ''
+  if (n <= 49) return 'ضعيف'
+  if (n <= 64) return 'وسط'
+  if (n <= 74) return 'جيد'
+  if (n <= 84) return 'جيد جدًا'
+  return 'ممتاز'
+}
 
 interface EvaluationFormProps {
   open: boolean
@@ -16,8 +27,9 @@ export function EvaluationForm({ open, onClose, initial, onSaved, employees }: E
     employee_id: initial?.employee_id?.toString() ?? '',
     evaluator_id: initial?.evaluator_id?.toString() ?? '',
     period: initial?.period ?? '',
+    evaluation_date: initial?.evaluation_date ?? new Date().toISOString().split('T')[0],
     overall_score: initial?.overall_score?.toString() ?? '',
-    rating: initial?.rating ?? 'جيد',
+    rating: initial?.overall_score != null ? scoreToRating(initial.overall_score) : (initial?.rating ?? ''),
     goals_percent: initial?.goals_percent?.toString() ?? initial?.goals_achievement?.toString() ?? '0',
     status: initial?.status ?? 'قيد المراجعة',
   })
@@ -30,13 +42,26 @@ export function EvaluationForm({ open, onClose, initial, onSaved, employees }: E
         employee_id: initial.employee_id?.toString() ?? '',
         evaluator_id: initial.evaluator_id?.toString() ?? '',
         period: initial.period ?? '',
+        evaluation_date: initial.evaluation_date ?? new Date().toISOString().split('T')[0],
         overall_score: initial.overall_score?.toString() ?? '',
-        rating: initial.rating ?? 'جيد',
+        rating: initial.overall_score != null ? scoreToRating(initial.overall_score) : (initial.rating ?? ''),
         goals_percent: initial.goals_percent?.toString() ?? initial.goals_achievement?.toString() ?? '0',
         status: initial.status ?? 'قيد المراجعة',
       })
+    } else if (open) {
+      setForm({
+        employee_id: '',
+        evaluator_id: '',
+        period: '',
+        evaluation_date: new Date().toISOString().split('T')[0],
+        overall_score: '',
+        rating: '',
+        goals_percent: '0',
+        status: 'قيد المراجعة',
+      })
+      setErrors({})
     }
-  }, [initial])
+  }, [initial, open])
 
   const handleSave = async () => {
     try {
@@ -103,52 +128,22 @@ export function EvaluationForm({ open, onClose, initial, onSaved, employees }: E
           <div className="grid grid-cols-2 gap-6">
             {/* الموظف */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                الموظف *
-              </label>
-              <select
-                value={form.employee_id}
-                onChange={(e) => setForm(prev => ({ ...prev, employee_id: e.target.value }))}
-                className={`w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors.employee_id ? 'border-red-500' : 'border-gray-300'
-                }`}
-                required
-              >
-                <option value="">اختر الموظف</option>
-                {employees.map(emp => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.employee_no} - {emp.full_name}
-                  </option>
-                ))}
-              </select>
-              {errors.employee_id && (
-                <p className="text-red-500 text-sm mt-1">{errors.employee_id}</p>
-              )}
+              <EmployeeSearchSelect
+                selectedId={form.employee_id ? Number(form.employee_id) : null}
+                onSelect={(emp) => setForm(prev => ({ ...prev, employee_id: emp?.id?.toString() ?? '' }))}
+                error={errors.employee_id}
+              />
             </div>
 
             {/* المُقيِّم */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                المُقيِّم *
-              </label>
-              <select
-                value={form.evaluator_id}
-                onChange={(e) => setForm(prev => ({ ...prev, evaluator_id: e.target.value }))}
-                className={`w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors.evaluator_id ? 'border-red-500' : 'border-gray-300'
-                }`}
-                required
-              >
-                <option value="">اختر المُقيِّم</option>
-                {employees.map(emp => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.employee_no} - {emp.full_name}
-                  </option>
-                ))}
-              </select>
-              {errors.evaluator_id && (
-                <p className="text-red-500 text-sm mt-1">{errors.evaluator_id}</p>
-              )}
+              <EmployeeSearchSelect
+                selectedId={form.evaluator_id ? Number(form.evaluator_id) : null}
+                onSelect={(emp) => setForm(prev => ({ ...prev, evaluator_id: emp?.id?.toString() ?? '' }))}
+                label="المُقيِّم"
+                placeholder="ابحث بالاسم أو الرقم..."
+                error={errors.evaluator_id}
+              />
             </div>
 
             {/* الفترة */}
@@ -168,6 +163,25 @@ export function EvaluationForm({ open, onClose, initial, onSaved, employees }: E
               />
               {errors.period && (
                 <p className="text-red-500 text-sm mt-1">{errors.period}</p>
+              )}
+            </div>
+
+            {/* تاريخ التقييم */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                تاريخ التقييم *
+              </label>
+              <input
+                type="date"
+                value={form.evaluation_date}
+                onChange={(e) => setForm(prev => ({ ...prev, evaluation_date: e.target.value }))}
+                className={`w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  errors.evaluation_date ? 'border-red-500' : 'border-gray-300'
+                }`}
+                required
+              />
+              {errors.evaluation_date && (
+                <p className="text-red-500 text-sm mt-1">{errors.evaluation_date}</p>
               )}
             </div>
 
@@ -204,7 +218,7 @@ export function EvaluationForm({ open, onClose, initial, onSaved, employees }: E
                 min="0"
                 max="100"
                 value={form.overall_score}
-                onChange={(e) => setForm(prev => ({ ...prev, overall_score: e.target.value }))}
+                onChange={(e) => setForm(prev => ({ ...prev, overall_score: e.target.value, rating: scoreToRating(e.target.value) }))}
                 className={`w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                   errors.overall_score ? 'border-red-500' : 'border-gray-300'
                 }`}
@@ -219,22 +233,19 @@ export function EvaluationForm({ open, onClose, initial, onSaved, employees }: E
             {/* التقييم */}
             <div className="col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                التقييم *
+                التقييم <span className="text-gray-400 text-xs">(يُحتسب تلقائياً)</span>
               </label>
-              <select
-                value={form.rating}
-                onChange={(e) => setForm(prev => ({ ...prev, rating: e.target.value }))}
-                className={`w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors.rating ? 'border-red-500' : 'border-gray-300'
-                }`}
-                required
-              >
-                <option value="ضعيف">ضعيف</option>
-                <option value="يحتاج تحسين">يحتاج تحسين</option>
-                <option value="مقبول">مقبول</option>
-                <option value="جيد">جيد</option>
-                <option value="ممتاز">ممتاز</option>
-              </select>
+              <div className={`w-full border rounded-md px-3 py-2 bg-gray-50 text-gray-800 font-semibold ${
+                form.rating === 'ممتاز' ? 'text-green-700 border-green-300 bg-green-50' :
+                form.rating === 'جيد جدًا' ? 'text-blue-700 border-blue-300 bg-blue-50' :
+                form.rating === 'جيد' ? 'text-cyan-700 border-cyan-300 bg-cyan-50' :
+                form.rating === 'وسط' ? 'text-yellow-700 border-yellow-300 bg-yellow-50' :
+                form.rating === 'ضعيف' ? 'text-red-700 border-red-300 bg-red-50' :
+                'border-gray-300'
+              }`}>
+                {form.rating || '—'}
+              </div>
+              <input type="hidden" name="rating" value={form.rating} />
               {errors.rating && (
                 <p className="text-red-500 text-sm mt-1">{errors.rating}</p>
               )}

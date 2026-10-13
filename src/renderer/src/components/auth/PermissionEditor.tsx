@@ -104,36 +104,36 @@ export function PermissionEditor({ isOpen, onClose, user, onSuccess }: Permissio
             acc[perm.page_key] = []
         }
         acc[perm.page_key].push(perm)
-        return {}
+        return acc
     }, {} as Record<string, Permission[]>)
 
     const pages = [...new Set(allPermissions.map(p => p.page_key))]
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-card rounded-lg max-w-3xl w-full max-h-[90vh] shadow-xl border border-border flex flex-col">
+            <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] shadow-xl border border-gray-200 flex flex-col">
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-border">
-                    <h2 className="text-xl font-bold text-foreground">
+                <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                    <h2 className="text-xl font-bold text-gray-900">
                         إدارة صلاحيات: {user.username}
                     </h2>
                     <button
                         onClick={onClose}
-                        className="text-muted-foreground hover:text-foreground transition-colors"
+                        className="text-gray-500 hover:text-gray-800 transition-colors"
                     >
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className="flex-1 overflow-y-auto p-6 bg-white">
                     {isLoading ? (
                         <div className="flex items-center justify-center h-64">
-                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
                         </div>
                     ) : user.is_admin ? (
                         <div className="text-center py-12">
-                            <p className="text-muted-foreground">
+                            <p className="text-gray-500">
                                 المديرون لديهم جميع الصلاحيات تلقائياً
                             </p>
                         </div>
@@ -145,14 +145,14 @@ export function PermissionEditor({ isOpen, onClose, user, onSuccess }: Permissio
                                 const someSelected = pagePerms.some(p => selectedPermissions.includes(p.id))
 
                                 return (
-                                    <div key={pageKey} className="border border-border rounded-lg p-4">
+                                    <div key={pageKey} className="border border-gray-200 rounded-lg p-4 bg-white">
                                         {/* Page Header */}
                                         <div className="flex items-center justify-between mb-3">
                                             <button
                                                 onClick={() => toggleAllForPage(pageKey)}
-                                                className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors"
+                                                className="flex items-center gap-2 text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
                                             >
-                                                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${allSelected ? 'bg-primary border-primary' : someSelected ? 'bg-primary/50 border-primary' : 'border-border'
+                                                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${allSelected ? 'bg-blue-600 border-blue-600' : someSelected ? 'bg-blue-200 border-blue-600' : 'border-gray-300'
                                                     }`}>
                                                     {allSelected && <Check className="w-3 h-3 text-white" />}
                                                 </div>
@@ -165,15 +165,15 @@ export function PermissionEditor({ isOpen, onClose, user, onSuccess }: Permissio
                                             {pagePerms.map(perm => (
                                                 <label
                                                     key={perm.id}
-                                                    className="flex items-center gap-2 p-2 rounded hover:bg-muted/50 cursor-pointer transition-colors"
+                                                    className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 cursor-pointer transition-colors"
                                                 >
                                                     <input
                                                         type="checkbox"
                                                         checked={selectedPermissions.includes(perm.id)}
                                                         onChange={() => togglePermission(perm.id)}
-                                                        className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+                                                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                                                     />
-                                                    <span className="text-sm text-foreground">{perm.display_name}</span>
+                                                    <span className="text-sm text-gray-900">{perm.display_name}</span>
                                                 </label>
                                             ))}
                                         </div>
@@ -186,7 +186,7 @@ export function PermissionEditor({ isOpen, onClose, user, onSuccess }: Permissio
 
                 {/* Footer */}
                 {!user.is_admin && (
-                    <div className="flex gap-3 p-6 border-t border-border">
+                    <div className="flex gap-3 p-6 border-t border-gray-200">
                         <Button
                             variant="outline"
                             onClick={onClose}

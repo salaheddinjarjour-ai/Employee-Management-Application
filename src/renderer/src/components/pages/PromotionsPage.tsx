@@ -17,6 +17,7 @@ interface Promotion {
   status: string
   effective_date: string
   increase_amount_usd?: number
+  increase_currency?: string
   increase_percent?: number
   notes?: string
   created_at: string
@@ -165,11 +166,12 @@ export function PromotionsPage() {
   }
 
   const renderSalaryIncrease = (promotion: Promotion) => {
+    const currSymbol = promotion.increase_currency === 'TRY' ? '₺' : '$'
     if (promotion.increase_amount_usd && promotion.increase_percent) {
       return (
         <div className="text-sm">
           <div className="font-medium text-green-600">
-            +{formatCurrency(promotion.increase_amount_usd)}
+            +{currSymbol}{Number(promotion.increase_amount_usd).toLocaleString('ar', { minimumFractionDigits: 2 })}
           </div>
           <div className="text-gray-500">
             ({promotion.increase_percent}%)
@@ -179,7 +181,7 @@ export function PromotionsPage() {
     } else if (promotion.increase_amount_usd) {
       return (
         <div className="text-sm font-medium text-green-600">
-          +{formatCurrency(promotion.increase_amount_usd)}
+          +{currSymbol}{Number(promotion.increase_amount_usd).toLocaleString('ar', { minimumFractionDigits: 2 })}
         </div>
       )
     } else if (promotion.increase_percent) {
@@ -304,6 +306,12 @@ export function PromotionsPage() {
                   الموظف
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  المسمى السابق
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  المسمى الجديد
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   الدرجة
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -325,11 +333,17 @@ export function PromotionsPage() {
                 <tr key={promotion.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">
-                      {promotion.employee_name}
+                      {promotion.employee_name || <span className="text-gray-400">-</span>}
                     </div>
                     <div className="text-sm text-gray-500">
                       {promotion.promo_type}
                     </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                    {promotion.from_title || '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                    {promotion.to_title || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {promotion.from_grade && promotion.to_grade ? (

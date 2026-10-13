@@ -36,21 +36,22 @@ export const exchangeRatesHandlers = {
     create: async (_event: IpcMainInvokeEvent, data: any) => {
         const db = getDatabase()
         try {
-            // Start transaction-like behavior (SQLite is serial in this setup)
-
             // If new rate is active, deactivate all others
             if (data.is_active) {
                 db.run(`UPDATE exchange_rates SET is_active = 0 WHERE is_active = 1`)
             }
 
             const effectiveDate = data.effective_from || data.effective_date || new Date().toISOString().split('T')[0]
-            const rate = data.rate
-            const note = data.note ? `'${data.note.replace(/'/g, "''")}'` : 'NULL'
+            const rate = parseFloat(data.rate)
+            const fromCurrency = data.from_currency || data.currency_from || 'USD'
+            const toCurrency = data.to_currency || data.currency_to || 'TRY'
+            const isActive = data.is_active ? 1 : 0
+            const note = data.note ? `'${String(data.note).replace(/'/g, "''")}'` : 'NULL'
 
             db.run(`
                 INSERT INTO exchange_rates (
-                    currency_from, currency_to, rate, effective_date, created_at
-                ) VALUES ('USD', 'TRY', ${rate}, '${effectiveDate}', datetime('now'))
+                    currency_from, currency_to, rate, effective_date, is_active, note, created_at
+                ) VALUES ('${fromCurrency}', '${toCurrency}', ${rate}, '${effectiveDate}', ${isActive}, ${note}, datetime('now'))
             `)
 
             persistDatabase()
@@ -103,6 +104,29 @@ export const exchangeRatesHandlers = {
             return obj
         } catch (error) {
             console.error('Error fetching active exchange rate:', error)
+            throw error
+        }
+    },
+
+    update: async (_event: IpcMainInvokeEvent, id: number, data: any) => {
+        const db = getDatabase()
+        try {
+            const rate = data.rate
+            const effectiveDate = data.effective_from || data.effective_date
+            const note = data.note !== undefined ? `'${String(data.note).replace(/'/g, "''")}'` : 'NULL'
+
+            const sets: string[] = []
+            if (rate !== undefined) sets.push(`rate = ${parseFloat(rate)}`)
+            if (effectiveDate) sets.push(`effective_date = '${effectiveDate}'`)
+            sets.push(`note = ${note}`)
+
+            if (sets.length > 0) {
+                db.run(`UPDATE exchange_rates SET ${sets.join(', ')} WHERE id = ${id}`)
+                persistDatabase()
+            }
+            return { success: true }
+        } catch (error) {
+            console.error('Error updating exchange rate:', error)
             throw error
         }
     },

@@ -1,7 +1,7 @@
 import sql from 'mssql'
 import fs from 'fs'
 import path from 'path'
-import { query } from './mssql-connection'
+import { query } from './connection'
 
 const DB_NAME = process.env.DB_NAME || 'EmployeeManagement'
 

@@ -59,7 +59,6 @@ function App() {
 
   useEffect(() => {
     // Listen for startup errors
-    // @ts-ignore
     const removeListener = window.api.onDbConnectionFailed?.((error) => {
       console.error('Startup DB Error:', error)
       if (location.pathname !== '/settings') {
@@ -70,7 +69,6 @@ function App() {
     // Proactive check on mount
     const checkConnection = async () => {
       try {
-        // @ts-ignore
         const result = await window.api.invoke('diagnostics:run-all')
         if (result && result.checks) {
           const connCheck = result.checks.find((c: any) => c.name === 'اتصال قاعدة البيانات')

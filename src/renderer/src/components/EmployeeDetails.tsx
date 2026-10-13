@@ -5,6 +5,7 @@ import { cn } from './ui/utils'
 import { X, User, BookOpen, Star, TrendingUp, Gift, Calendar, Clock, DollarSign, FileText, Edit } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { formatCurrency } from '@/utils/currency'
+import { arabicUnit, AR_DAYS, AR_YEARS } from '@/utils/format'
 
 interface Employee {
   id: number
@@ -12,13 +13,21 @@ interface Employee {
   full_name: string
   email: string
   department?: string
-  position?: string
+  unit?: string
+  job_title?: string
   hire_date: string
   salary_grade_id: number
   phone?: string
   status: 'active' | 'inactive'
   created_at?: string
   updated_at?: string
+  notes?: string
+  roles?: {
+    role_type: string
+    entity_name: string
+    job_title?: string
+    is_primary: boolean
+  }[]
 }
 
 interface EmployeeDetailsProps {
@@ -80,15 +89,35 @@ export function EmployeeDetails({ employee, onClose, onEdit, mode = 'drawer', cl
                   <p className="text-gray-900">{employee.phone || 'غير محدد'}</p>
                 </div>
               </div>
-              
+
               <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">القسم</label>
-                  <p className="text-gray-900">{employee.department || 'غير محدد'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">المنصب</label>
-                  <p className="text-gray-900">{employee.position || 'غير محدد'}</p>
+                <div className="col-span-full">
+                  <label className="text-sm font-medium text-gray-500 mb-2 block">الأدوار والجهات</label>
+                  {employee.roles && employee.roles.length > 0 ? (
+                    <div className="flex flex-col space-y-2">
+                      {employee.roles.filter(r => r.is_primary).map((r, i) => (
+                        <div key={`primary-${i}`} className="flex items-center space-x-reverse space-x-2">
+                          <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded text-xs border border-blue-100 placeholder-hide shrink-0">أساسي</span>
+                          <span className="font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded text-xs border border-gray-200 shrink-0">
+                            {r.role_type === 'committee' ? 'لجنة' : r.role_type === 'unit' ? 'وحدة' : 'قسم'}
+                          </span>
+                          {r.job_title && <span className="text-gray-900 font-medium text-sm">{r.job_title}</span>}
+                          <span className="text-gray-600 text-sm">- {r.entity_name}</span>
+                        </div>
+                      ))}
+                      {employee.roles.filter(r => !r.is_primary).map((r, i) => (
+                        <div key={`backup-${i}`} className="flex items-center space-x-reverse space-x-2">
+                          <span className="font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded text-xs border border-gray-200 shrink-0">
+                            {r.role_type === 'committee' ? 'لجنة' : r.role_type === 'unit' ? 'وحدة' : 'قسم'}
+                          </span>
+                          {r.job_title && <span className="text-gray-800 text-sm">{r.job_title}</span>}
+                          <span className="text-gray-600 text-sm">- {r.entity_name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 italic text-sm">لا توجد أدوار مسندة</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">تاريخ التوظيف</label>
@@ -96,13 +125,16 @@ export function EmployeeDetails({ employee, onClose, onEdit, mode = 'drawer', cl
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">الحالة</label>
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    employee.status === 'active' 
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}>
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${employee.status === 'active'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-gray-100 text-gray-800'
+                    }`}>
                     {employee.status === 'active' ? 'نشط' : 'غير نشط'}
                   </span>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">ملاحظات</label>
+                  <p className="text-gray-900">{employee.notes || 'لا توجد ملاحظات'}</p>
                 </div>
               </div>
             </div>
@@ -114,7 +146,7 @@ export function EmployeeDetails({ employee, onClose, onEdit, mode = 'drawer', cl
                 <div>
                   <span className="text-blue-600">سنوات الخدمة</span>
                   <p className="font-semibold text-blue-900">
-                    {Math.floor((new Date().getTime() - new Date(employee.hire_date).getTime()) / (1000 * 60 * 60 * 24 * 365))} سنة
+                    {(() => { const y = Math.floor((new Date().getTime() - new Date(employee.hire_date).getTime()) / (1000 * 60 * 60 * 24 * 365)); return `${y} ${arabicUnit(y, AR_YEARS)}` })()} 
                   </p>
                 </div>
                 <div>
@@ -227,7 +259,7 @@ export function EmployeeDetails({ employee, onClose, onEdit, mode = 'drawer', cl
               <h3 className="text-lg font-semibold text-gray-900">كشف الراتب</h3>
               <Button size="sm">إضافة راتب</Button>
             </div>
-            
+
             {/* Sample Payroll Data */}
             <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
               <div className="px-4 py-3 bg-gray-50 border-b">
@@ -269,7 +301,7 @@ export function EmployeeDetails({ employee, onClose, onEdit, mode = 'drawer', cl
         return (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-900">سنوات الخدمة</h3>
-            
+
             {/* Service Timeline */}
             <div className="bg-white border border-gray-200 rounded-lg p-6">
               <div className="space-y-4">
@@ -282,7 +314,7 @@ export function EmployeeDetails({ employee, onClose, onEdit, mode = 'drawer', cl
                     <p className="text-2xl font-bold text-blue-900">
                       {Math.floor((new Date().getTime() - new Date(employee.hire_date).getTime()) / (1000 * 60 * 60 * 24 * 365))}
                     </p>
-                    <p className="text-sm text-blue-700">سنة</p>
+                    <p className="text-sm text-blue-700">{arabicUnit(Math.floor((new Date().getTime() - new Date(employee.hire_date).getTime()) / (1000 * 60 * 60 * 24 * 365)), AR_YEARS)}</p>
                   </div>
                 </div>
 
@@ -290,13 +322,13 @@ export function EmployeeDetails({ employee, onClose, onEdit, mode = 'drawer', cl
                   <div className="p-4 border border-gray-200 rounded-lg">
                     <h5 className="font-medium text-gray-900">الأيام المتبقية للتقاعد</h5>
                     <p className="text-lg font-semibold text-gray-700">
-                      {Math.max(0, 25 * 365 - Math.floor((new Date().getTime() - new Date(employee.hire_date).getTime()) / (1000 * 60 * 60 * 24)))} يوم
+                      {(() => { const d = Math.max(0, 25 * 365 - Math.floor((new Date().getTime() - new Date(employee.hire_date).getTime()) / (1000 * 60 * 60 * 24))); return `${d} ${arabicUnit(d, AR_DAYS)}` })()} 
                     </p>
                   </div>
                   <div className="p-4 border border-gray-200 rounded-lg">
                     <h5 className="font-medium text-gray-900">إجمالي أيام العمل</h5>
                     <p className="text-lg font-semibold text-gray-700">
-                      {Math.floor((new Date().getTime() - new Date(employee.hire_date).getTime()) / (1000 * 60 * 60 * 24))} يوم
+                      {(() => { const d = Math.floor((new Date().getTime() - new Date(employee.hire_date).getTime()) / (1000 * 60 * 60 * 24)); return `${d} ${arabicUnit(d, AR_DAYS)}` })()} 
                     </p>
                   </div>
                 </div>
@@ -327,7 +359,7 @@ export function EmployeeDetails({ employee, onClose, onEdit, mode = 'drawer', cl
       {isDrawer && (
         <div className="flex-1 bg-black/50" onClick={onClose} />
       )}
-      
+
       <div className={cn(contentClasses, className)}>
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b bg-white">
@@ -337,10 +369,12 @@ export function EmployeeDetails({ employee, onClose, onEdit, mode = 'drawer', cl
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">{employee.full_name}</h1>
-              <p className="text-sm text-gray-500">{employee.employee_no} • {employee.position || 'موظف'}</p>
+              <p className="text-sm text-gray-500">
+                {employee.employee_no} • {employee.roles?.find(r => r.is_primary)?.job_title || 'موظف'}
+              </p>
             </div>
           </div>
-          
+
           <div className="flex items-center space-x-reverse space-x-2">
             {onEdit && (
               <Button variant="outline" size="sm" onClick={() => onEdit(employee)}>

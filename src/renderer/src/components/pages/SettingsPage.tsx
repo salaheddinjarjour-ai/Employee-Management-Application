@@ -5,7 +5,7 @@ import { Label } from '../ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs'
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group'
-import { Save, Building, User, Upload, Image as ImageIcon, Database, Activity, Loader2, CheckCircle2, XCircle, AlertTriangle, DollarSign, Download } from 'lucide-react'
+import { Save, Building, Image as ImageIcon, Database, Activity, Loader2, CheckCircle2, XCircle, AlertTriangle, DollarSign, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { useSearchParams } from 'react-router-dom'
 
@@ -76,7 +76,9 @@ function GeneralSettings() {
   const [settings, setSettings] = useState({
     orgName: '',
     preparedBy: '',
-    orgLogo: '' // Base64 string
+    orgLogo: '', // Base64 string
+    experienceRatePerYear: '',
+    defaultCurrency: 'TRY'
   })
 
   useEffect(() => {
@@ -143,6 +145,17 @@ function GeneralSettings() {
         </div>
 
         <div className="space-y-2">
+          <Label>معدّ التقرير</Label>
+          <Input
+            type="text"
+            value={settings.preparedBy}
+            onChange={(e) => setSettings({ ...settings, preparedBy: e.target.value })}
+            placeholder="اسم الشخص المسؤول عن إعداد التقارير"
+          />
+          <p className="text-xs text-muted-foreground">يظهر في تذييل التقارير المطبوعة</p>
+        </div>
+
+        <div className="space-y-2">
           <Label>شعار المؤسسة</Label>
           <div className="flex items-start gap-4">
             <div className="relative group cursor-pointer border-2 border-dashed border-border rounded-xl p-1 w-32 h-32 flex items-center justify-center hover:bg-muted/50 transition-colors overflow-hidden">
@@ -182,6 +195,36 @@ function GeneralSettings() {
           </div>
         </div>
 
+        <div className="border-t pt-6 mt-6">
+          <h3 className="text-lg font-medium mb-4">إعدادات سلم الرواتب</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>بدل الخبرة لكل سنة</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={settings.experienceRatePerYear}
+                onChange={(e) => setSettings({ ...settings, experienceRatePerYear: e.target.value })}
+                placeholder="مثال: 50"
+              />
+              <p className="text-xs text-muted-foreground">المبلغ المضاف لكل سنة خبرة في كشف الراتب</p>
+            </div>
+            <div className="space-y-2">
+              <Label>العملة الافتراضية</Label>
+              <select
+                value={settings.defaultCurrency}
+                onChange={(e) => setSettings({ ...settings, defaultCurrency: e.target.value })}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="TRY">ليرة تركية (TRY)</option>
+                <option value="USD">دولار أمريكي (USD)</option>
+                <option value="EUR">يورو (EUR)</option>
+                <option value="SAR">ريال سعودي (SAR)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
         <div className="flex justify-end pt-4">
           <Button onClick={handleSave} disabled={saving}>
             <Save className="w-4 h-4 ml-2" />
@@ -211,7 +254,6 @@ function ConnectionSettings() {
 
   const loadConfig = async () => {
     try {
-      // @ts-ignore
       const savedConfig = await window.api.invoke('connection:get-config');
       setConfig(savedConfig);
     } catch (err) {
@@ -239,7 +281,6 @@ function ConnectionSettings() {
   const handleTest = async () => {
     setTesting(true);
     try {
-      // @ts-ignore
       const result = await window.api.invoke('connection:test', config);
       if (result.success) {
         toast.success('تم الاتصال بنجاح');
@@ -256,7 +297,6 @@ function ConnectionSettings() {
   const handleSave = async () => {
     setLoading(true);
     try {
-      // @ts-ignore
       const result = await window.api.invoke('connection:save-config', config);
       if (result.success) {
         toast.success('تم حفظ الإعدادات وإعادة الاتصال');
@@ -412,7 +452,6 @@ function HealthCheck() {
     setOverallStatus('pending');
 
     try {
-      // @ts-ignore
       const result = await window.api.invoke('diagnostics:run-all');
       if (result && result.checks) {
         setChecks(result.checks);
@@ -518,7 +557,6 @@ function ExchangeRatesTab() {
   const loadRates = async () => {
     try {
       setLoading(true);
-      // @ts-ignore
       const result = await window.api.invoke('exchange-rates:history');
       setRates(result || []);
     } catch (error) {
@@ -536,7 +574,6 @@ function ExchangeRatesTab() {
     }
 
     try {
-      // @ts-ignore
       await window.api.invoke('exchange-rates:create', {
         ...newRate,
         rate: parseFloat(newRate.rate)
@@ -560,7 +597,6 @@ function ExchangeRatesTab() {
 
   const handleActivate = async (id: number) => {
     try {
-      // @ts-ignore
       await window.api.invoke('exchange-rates:activate', id);
       toast.success('تم تفعيل سعر الصرف');
       await loadRates();
@@ -578,7 +614,6 @@ function ExchangeRatesTab() {
     }
 
     try {
-      // @ts-ignore
       const result = await window.api.invoke('exchange-rates:conversion-preview', amount);
       setConversionResult(result);
       if (!result.success) {

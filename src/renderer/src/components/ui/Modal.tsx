@@ -14,14 +14,14 @@ function Modal({ open, onClose, children, className = '' }: ModalProps) {
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
-      <div 
-        className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+      <div
+        className="fixed inset-0 bg-black/50 transition-opacity"
         onClick={onClose}
       />
-      
+
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div 
+        <div
           className={`relative bg-white rounded-lg shadow-xl max-w-md w-full ${className}`}
           onClick={(e) => e.stopPropagation()}
         >
@@ -32,7 +32,7 @@ function Modal({ open, onClose, children, className = '' }: ModalProps) {
           >
             <X className="w-5 h-5" />
           </button>
-          
+
           {children}
         </div>
       </div>

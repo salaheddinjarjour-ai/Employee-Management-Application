@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Button } from '../ui/Button'
 import { useAppStore } from '@/store/appStore'
-import { Plus, Check, X } from 'lucide-react'
+import { Plus, Check, X, Edit } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface ExchangeRate {
@@ -22,6 +22,7 @@ export function ExchangeRatesPage() {
   const [rates, setRates] = useState<ExchangeRate[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
   const [formData, setFormData] = useState({
     rate: '',
     effective_from: new Date().toISOString().split('T')[0],
@@ -65,14 +66,25 @@ export function ExchangeRatesPage() {
     }
 
     try {
-      await window.api.invoke('exchange-rates:create', {
-        rate: rateValue,
-        effective_from: formData.effective_from,
-        note: formData.note,
-        is_active: true // Auto activate
-      })
-
-      toast.success('تم حفظ معدل الصرف وتفعيله بنجاح')
+      if (editingId !== null) {
+        // Update existing rate
+        await window.api.invoke('exchange-rates:update', editingId, {
+          rate: rateValue,
+          effective_from: formData.effective_from,
+          note: formData.note
+        })
+        toast.success('تم تحديث معدل الصرف بنجاح')
+        setEditingId(null)
+      } else {
+        // Create new rate and auto-activate
+        await window.api.invoke('exchange-rates:create', {
+          rate: rateValue,
+          effective_from: formData.effective_from,
+          note: formData.note,
+          is_active: true
+        })
+        toast.success('تم حفظ معدل الصرف وتفعيله بنجاح')
+      }
 
       setShowAddForm(false)
       setFormData({
@@ -85,6 +97,16 @@ export function ExchangeRatesPage() {
       console.error('Failed to save rate:', error)
       toast.error('فشل حفظ معدل الصرف')
     }
+  }
+
+  const startEdit = (rate: ExchangeRate) => {
+    setEditingId(rate.id)
+    setFormData({
+      rate: String(rate.rate),
+      effective_from: rate.effective_from,
+      note: rate.note || ''
+    })
+    setShowAddForm(true)
   }
 
   const activateRate = async (rate: ExchangeRate) => {
@@ -113,9 +135,13 @@ export function ExchangeRatesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">إدارة أسعار الصرف</h1>
-        <Button onClick={() => setShowAddForm(!showAddForm)}>
+        <Button onClick={() => {
+          setEditingId(null)
+          setFormData({ rate: '', effective_from: new Date().toISOString().split('T')[0], note: '' })
+          setShowAddForm(!showAddForm)
+        }}>
           <Plus className="w-4 h-4 mr-2" />
-          {showAddForm ? 'إخفاء النموذج' : 'إضافة معدل جديد'}
+          {showAddForm && !editingId ? 'إخفاء النموذج' : 'إضافة معدل جديد'}
         </Button>
       </div>
 
@@ -147,11 +173,11 @@ export function ExchangeRatesPage() {
       {showAddForm && (
         <div className="bg-white rounded-lg shadow-sm border p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">إضافة معدل صرف جديد</h3>
+            <h3 className="text-lg font-semibold text-gray-900">{editingId ? 'تعديل معدل الصرف' : 'إضافة معدل صرف جديد'}</h3>
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setShowAddForm(false)}
+              onClick={() => { setShowAddForm(false); setEditingId(null) }}
             >
               <X className="w-4 h-4" />
             </Button>
@@ -204,12 +230,12 @@ export function ExchangeRatesPage() {
             <div className="flex items-center space-x-reverse space-x-3">
               <Button type="submit">
                 <Check className="w-4 h-4 mr-2" />
-                حفظ وتفعيل
+                {editingId ? 'حفظ التعديلات' : 'حفظ وتفعيل'}
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setShowAddForm(false)}
+                onClick={() => { setShowAddForm(false); setEditingId(null) }}
               >
                 إلغاء
               </Button>
@@ -217,6 +243,84 @@ export function ExchangeRatesPage() {
           </form>
         </div>
       )}
+
+      {/* Rates History Table */}
+      <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+        <div className="p-4 border-b">
+          <h3 className="text-lg font-semibold text-gray-900">سجل أسعار الصرف</h3>
+        </div>
+        {rates.length === 0 ? (
+          <div className="p-6 text-center text-gray-500">
+            لا توجد أسعار صرف مسجلة
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">معدل الصرف</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">العملة</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">تاريخ السريان</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">الحالة</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">ملاحظة</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {rates.map((rate) => (
+                  <tr key={rate.id} className={`hover:bg-gray-50 transition-colors ${rate.is_active ? 'bg-blue-50/50' : ''}`}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                      {rate.rate}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      USD → TRY
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {rate.effective_from}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {rate.is_active ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          نشط
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                          غير نشط
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {rate.note || '—'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => startEdit(rate)}
+                        >
+                          <Edit className="w-3 h-3 mr-1" />
+                          تعديل
+                        </Button>
+                        {!rate.is_active && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => activateRate(rate)}
+                          >
+                            <Check className="w-3 h-3 mr-1" />
+                            تفعيل
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

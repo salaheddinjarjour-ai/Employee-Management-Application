@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Button } from '../ui/Button'
 import { X } from 'lucide-react'
 import { promotionInputSchema } from '../../schemas/promotion'
+import { EmployeeSearchSelect } from './EmployeeSearchSelect'
 
 interface PromotionFormProps {
   open: boolean
@@ -14,6 +15,7 @@ interface PromotionFormProps {
 export function PromotionForm({ open, onClose, initial, onSaved, employees }: PromotionFormProps) {
   const [form, setForm] = useState({
     employee_id: initial?.employee_id?.toString() ?? '',
+    employee_name: initial?.employee_name ?? '',
     from_title: initial?.from_title ?? '',
     to_title: initial?.to_title ?? '',
     from_grade: initial?.from_grade?.toString() ?? '',
@@ -22,6 +24,7 @@ export function PromotionForm({ open, onClose, initial, onSaved, employees }: Pr
     status: initial?.status ?? 'في الانتظار',
     effective_date: initial?.effective_date ?? '',
     increase_amount_usd: initial?.increase_amount_usd?.toString() ?? '',
+    increase_currency: initial?.increase_currency ?? 'USD',
     increase_percent: initial?.increase_percent?.toString() ?? '',
     notes: initial?.notes ?? '',
   })
@@ -32,6 +35,7 @@ export function PromotionForm({ open, onClose, initial, onSaved, employees }: Pr
     if (initial) {
       setForm({
         employee_id: initial.employee_id?.toString() ?? '',
+        employee_name: initial.employee_name ?? '',
         from_title: initial.from_title ?? '',
         to_title: initial.to_title ?? '',
         from_grade: initial.from_grade?.toString() ?? '',
@@ -40,6 +44,7 @@ export function PromotionForm({ open, onClose, initial, onSaved, employees }: Pr
         status: initial.status ?? 'في الانتظار',
         effective_date: initial.effective_date ?? '',
         increase_amount_usd: initial.increase_amount_usd?.toString() ?? '',
+        increase_currency: initial.increase_currency ?? 'USD',
         increase_percent: initial.increase_percent?.toString() ?? '',
         notes: initial.notes ?? '',
       })
@@ -111,27 +116,11 @@ export function PromotionForm({ open, onClose, initial, onSaved, employees }: Pr
           <div className="grid grid-cols-2 gap-6">
             {/* الموظف */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                الموظف *
-              </label>
-              <select
-                value={form.employee_id}
-                onChange={(e) => setForm(prev => ({ ...prev, employee_id: e.target.value }))}
-                className={`w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors.employee_id ? 'border-red-500' : 'border-gray-300'
-                }`}
-                required
-              >
-                <option value="">اختر الموظف</option>
-                {employees.map(emp => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.employee_no} - {emp.full_name}
-                  </option>
-                ))}
-              </select>
-              {errors.employee_id && (
-                <p className="text-red-500 text-sm mt-1">{errors.employee_id}</p>
-              )}
+              <EmployeeSearchSelect
+                selectedId={form.employee_id ? Number(form.employee_id) : null}
+                onSelect={(emp) => setForm(prev => ({ ...prev, employee_id: emp?.id?.toString() ?? '', employee_name: emp?.full_name ?? '' }))}
+                error={errors.employee_id}
+              />
             </div>
 
             {/* نوع الترقية */}
@@ -276,23 +265,33 @@ export function PromotionForm({ open, onClose, initial, onSaved, employees }: Pr
               )}
             </div>
 
-            {/* زيادة الراتب بالدولار */}
+            {/* زيادة على الراتب */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                زيادة بالدولار (اختياري)
+                زيادة على الراتب (اختياري)
               </label>
-              <input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                value={form.increase_amount_usd}
-                onChange={(e) => setForm(prev => ({ ...prev, increase_amount_usd: e.target.value }))}
-                className={`w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors.increase_amount_usd ? 'border-red-500' : 'border-gray-300'
-                }`}
-                placeholder="مثال: 100.50"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={form.increase_amount_usd}
+                  onChange={(e) => setForm(prev => ({ ...prev, increase_amount_usd: e.target.value }))}
+                  className={`flex-1 border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    errors.increase_amount_usd ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  placeholder="مثال: 100.50"
+                />
+                <select
+                  value={form.increase_currency}
+                  onChange={(e) => setForm(prev => ({ ...prev, increase_currency: e.target.value }))}
+                  className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 w-24"
+                >
+                  <option value="USD">$ دولار</option>
+                  <option value="TRY">₺ ليرة</option>
+                </select>
+              </div>
               {errors.increase_amount_usd && (
                 <p className="text-red-500 text-sm mt-1">{errors.increase_amount_usd}</p>
               )}

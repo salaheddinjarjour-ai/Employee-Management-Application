@@ -20,6 +20,7 @@ import { exchangeRatesHandlers } from './handlers/exchange-rates'
 import { reportsHandlers } from './handlers/reports'
 import { dataImportHandlers, payrollTemplateHandlers } from './handlers/data-import'
 import { delaysHandlers } from './handlers/delays'
+import { rewardsHandlers } from './handlers/rewards'
 import { registerAuthHandlers } from './handlers/auth'
 import { registerUserHandlers } from './handlers/users'
 import { registerPermissionHandlers } from './handlers/permissions'
@@ -69,12 +70,21 @@ export function registerIPCHandlers() {
     ipcMain.handle('leaves:update', leavesHandlers.update)
     ipcMain.handle('leaves:delete', (event, id) => leavesHandlers.delete(event, id as number))
     ipcMain.handle('leaves:stats', leavesHandlers.getStats)
+    ipcMain.handle('leaves:list-types', leavesHandlers.listTypes)
+    ipcMain.handle('leaves:create-type', leavesHandlers.createType)
+    ipcMain.handle('leaves:delete-type', (event, id) => leavesHandlers.deleteType(event, id as number))
+    ipcMain.handle('leaves:list-statuses', leavesHandlers.listStatuses)
+    ipcMain.handle('leaves:create-status', leavesHandlers.createStatus)
+    ipcMain.handle('leaves:delete-status', (event, id) => leavesHandlers.deleteStatus(event, id as number))
 
     // Absences
     ipcMain.handle('absences:list', absencesHandlers.list)
     ipcMain.handle('absences:create', absencesHandlers.create)
     ipcMain.handle('absences:update', (event, id, data) => absencesHandlers.update(event, id as number, data))
     ipcMain.handle('absences:delete', (event, id) => absencesHandlers.delete(event, id as number))
+    ipcMain.handle('absences:list-types', absencesHandlers.listTypes)
+    ipcMain.handle('absences:create-type', absencesHandlers.createType)
+    ipcMain.handle('absences:delete-type', (event, id) => absencesHandlers.deleteType(event, id as number))
 
     // Evaluations
     ipcMain.handle('evaluations:create', evaluationsHandlers.create)
@@ -86,6 +96,9 @@ export function registerIPCHandlers() {
     // Promotions
     ipcMain.handle('promotions:create', promotionsHandlers.create)
     ipcMain.handle('promotions:list', promotionsHandlers.list)
+    ipcMain.handle('promotions:update', (event, id, data) => promotionsHandlers.update(event, id as number, data))
+    ipcMain.handle('promotions:delete', (event, id) => promotionsHandlers.delete(event, id as number))
+    ipcMain.handle('promotions:stats', promotionsHandlers.stats)
     ipcMain.handle('promotions:sync-to-payroll', promotionsHandlers.syncToPayroll)
 
     // Courses
@@ -128,6 +141,15 @@ export function registerIPCHandlers() {
     ipcMain.handle('delays:create', delaysHandlers.create)
     ipcMain.handle('delays:delete', delaysHandlers.delete)
 
+    // Rewards types & statuses
+    ipcMain.handle('rewards:list-types', rewardsHandlers.listTypes)
+    ipcMain.handle('rewards:create-type', rewardsHandlers.createType)
+    ipcMain.handle('rewards:delete-type', (event, id) => rewardsHandlers.deleteType(event, id as number))
+    ipcMain.handle('rewards:list-statuses', rewardsHandlers.listStatuses)
+    ipcMain.handle('rewards:create-status', rewardsHandlers.createStatus)
+    ipcMain.handle('rewards:delete-status', (event, id) => rewardsHandlers.deleteStatus(event, id as number))
+    ipcMain.handle('rewards:sync-to-payroll', (event, id) => rewardsHandlers.syncToPayroll(event, id as number))
+
     // Dashboard
     ipcMain.handle('dashboard:summary', dashboardHandlers.getSummary)
 
@@ -159,6 +181,7 @@ export function registerIPCHandlers() {
     // Exchange Rates
     ipcMain.handle('exchange-rates:history', exchangeRatesHandlers.getHistory)
     ipcMain.handle('exchange-rates:create', exchangeRatesHandlers.create)
+    ipcMain.handle('exchange-rates:update', exchangeRatesHandlers.update)
     ipcMain.handle('exchange-rates:activate', exchangeRatesHandlers.activate)
     ipcMain.handle('exchange-rates:active', exchangeRatesHandlers.getActive)
     ipcMain.handle('exchange-rates:conversion-preview', exchangeRatesHandlers.getConversionPreview)

@@ -73,7 +73,7 @@ export default function MoneyInput({
           disabled={disabled}
           data-testid={testId ? `${testId}-amount` : undefined}
           aria-label={label}
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-right"
+          className="w-24 min-w-0 px-2 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-right text-sm"
         />
 
         <select
@@ -81,7 +81,7 @@ export default function MoneyInput({
           onChange={handleCurrencyChange}
           disabled={disabled}
           data-testid={testId ? `${testId}-currency` : undefined}
-          className="px-2 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[70px]"
+          className="px-1 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white w-[60px] text-sm"
         >
           <option value="TRY">TRY</option>
           <option value="USD">USD</option>

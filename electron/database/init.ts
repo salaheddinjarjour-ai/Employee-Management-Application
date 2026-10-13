@@ -257,6 +257,19 @@ async function migrateSchema() {
       }
     }
 
+    // Check entities (departments, units, committees) for description column
+    const entities = ['departments', 'units', 'committees'];
+    entities.forEach(entity => {
+      const entityColumns = db!.exec(`PRAGMA table_info(${entity})`);
+      if (entityColumns.length > 0 && entityColumns[0].values) {
+        const hasDescription = entityColumns[0].values.some(c => c[1] === 'description');
+        if (!hasDescription) {
+          console.log(`Migrating: Adding description to ${entity}`);
+          db!.run(`ALTER TABLE ${entity} ADD COLUMN description TEXT`);
+        }
+      }
+    });
+
     // Check payroll_headers for net_salary column
     const payrollHeaderColumns = db!.exec("PRAGMA table_info(payroll_headers)")
     if (payrollHeaderColumns.length > 0 && payrollHeaderColumns[0].values) {
@@ -374,6 +387,73 @@ async function migrateSchema() {
       `)
     }
 
+    // Create departments / units / committees tables if missing
+    const deptTable = db!.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='departments'")
+    if (deptTable.length === 0) {
+      console.log('Creating departments, units, committees and pivot tables')
+      db!.run(`CREATE TABLE IF NOT EXISTS departments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT
+      )`)
+      db!.run(`CREATE TABLE IF NOT EXISTS units (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        department_id INTEGER,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT,
+        FOREIGN KEY (department_id) REFERENCES departments(id)
+      )`)
+      db!.run(`CREATE TABLE IF NOT EXISTS committees (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT
+      )`)
+      db!.run(`CREATE TABLE IF NOT EXISTS employee_departments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        department_id INTEGER NOT NULL,
+        job_title TEXT,
+        is_primary INTEGER DEFAULT 0,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+        FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
+      )`)
+      db!.run(`CREATE TABLE IF NOT EXISTS employee_units (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        unit_id INTEGER NOT NULL,
+        job_title TEXT,
+        is_primary INTEGER DEFAULT 0,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+        FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE CASCADE
+      )`)
+      db!.run(`CREATE TABLE IF NOT EXISTS employee_committees (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        committee_id INTEGER NOT NULL,
+        role_title TEXT,
+        is_primary INTEGER DEFAULT 0,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+        FOREIGN KEY (committee_id) REFERENCES committees(id) ON DELETE CASCADE
+      )`)
+    } else {
+      // Ensure pivot tables exist even if departments already existed
+      db!.run(`CREATE TABLE IF NOT EXISTS employee_departments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL,
+        department_id INTEGER NOT NULL, job_title TEXT, is_primary INTEGER DEFAULT 0)`)
+      db!.run(`CREATE TABLE IF NOT EXISTS employee_units (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL,
+        unit_id INTEGER NOT NULL, job_title TEXT, is_primary INTEGER DEFAULT 0)`)
+      db!.run(`CREATE TABLE IF NOT EXISTS employee_committees (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL,
+        committee_id INTEGER NOT NULL, role_title TEXT, is_primary INTEGER DEFAULT 0)`)
+    }
+
     // Create audit_logs table if it doesn't exist
     const auditLogsTable = db!.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='audit_logs'")
     if (auditLogsTable.length === 0) {
@@ -396,9 +476,207 @@ async function migrateSchema() {
       `)
       console.log('Audit logs table created successfully')
     }
+
+    // Add reward_currency and notes columns to rewards table if missing
+    const rewardsColumns = db!.exec("PRAGMA table_info(rewards)")
+    if (rewardsColumns.length > 0 && rewardsColumns[0].values) {
+      const cols = rewardsColumns[0].values.map(c => c[1] as string)
+      if (!cols.includes('reward_currency')) {
+        db!.run("ALTER TABLE rewards ADD COLUMN reward_currency TEXT DEFAULT 'USD'")
+      }
+      if (!cols.includes('notes')) {
+        db!.run("ALTER TABLE rewards ADD COLUMN notes TEXT")
+      }
+      if (!cols.includes('payroll_action')) {
+        db!.run("ALTER TABLE rewards ADD COLUMN payroll_action TEXT DEFAULT 'direct'") // 'direct' | 'payroll'
+      }
+      if (!cols.includes('payroll_month')) {
+        db!.run("ALTER TABLE rewards ADD COLUMN payroll_month TEXT") // e.g. '2026-04'
+      }
+      if (!cols.includes('payroll_synced')) {
+        db!.run("ALTER TABLE rewards ADD COLUMN payroll_synced INTEGER DEFAULT 0")
+      }
+    }
+
+    // Rebuild rewards table if it has old CHECK constraints on status or kind
+    const rewardsMaster = db!.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='rewards'")
+    if (rewardsMaster.length > 0 && rewardsMaster[0].values.length > 0) {
+      const createSql = rewardsMaster[0].values[0][0] as string
+      if (createSql && createSql.includes('CHECK') && createSql.includes('status')) {
+        console.log('[Migration] Rebuilding rewards table to remove CHECK constraints')
+        db!.exec(`
+          BEGIN TRANSACTION;
+          CREATE TABLE IF NOT EXISTS rewards_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL,
+            employee_name TEXT,
+            title TEXT NOT NULL,
+            description TEXT,
+            kind TEXT,
+            amount_usd REAL,
+            reward_date TEXT NOT NULL,
+            status TEXT DEFAULT 'في الانتظار',
+            reward_currency TEXT DEFAULT 'USD',
+            notes TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT,
+            FOREIGN KEY (employee_id) REFERENCES employees(id)
+          );
+          INSERT INTO rewards_new (id, employee_id, employee_name, title, description, kind, amount_usd, reward_date, status, created_at, updated_at)
+            SELECT id, employee_id, employee_name, title, description, kind, amount_usd, reward_date, COALESCE(status, 'في الانتظار'), created_at, updated_at FROM rewards;
+          DROP TABLE rewards;
+          ALTER TABLE rewards_new RENAME TO rewards;
+          COMMIT;
+        `)
+      }
+    }
+
+    // Add fine_currency column to absences table if missing
+    const absencesColumns = db!.exec("PRAGMA table_info(absences)")
+    if (absencesColumns.length > 0 && absencesColumns[0].values) {
+      const cols = absencesColumns[0].values.map(c => c[1] as string)
+      if (!cols.includes('fine_currency')) {
+        db!.run("ALTER TABLE absences ADD COLUMN fine_currency TEXT DEFAULT 'TRY'")
+      }
+    }
+
+    // Add increase_currency column to promotions table if missing
+    const promotionsColumnsCheck = db!.exec("PRAGMA table_info(promotions)")
+    if (promotionsColumnsCheck.length > 0 && promotionsColumnsCheck[0].values) {
+      const cols = promotionsColumnsCheck[0].values.map(c => c[1] as string)
+      if (!cols.includes('increase_currency')) {
+        db!.run("ALTER TABLE promotions ADD COLUMN increase_currency TEXT DEFAULT 'USD'")
+      }
+    }
+
+    // Create leave_types table with defaults if it doesn't exist
+    const leaveTypesTable = db!.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='leave_types'")
+    if (leaveTypesTable.length === 0) {
+      db!.run(`
+        CREATE TABLE IF NOT EXISTS leave_types (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          is_active INTEGER DEFAULT 1,
+          created_at TEXT DEFAULT (datetime('now'))
+        )
+      `)
+      const defaultTypes = ['سنوية', 'مرضية', 'طارئة', 'بدون راتب', 'أمومة', 'أبوة', 'أخرى']
+      defaultTypes.forEach(t => {
+        db!.run("INSERT OR IGNORE INTO leave_types (name) VALUES (?)", [t])
+      })
+    }
+
+    // Create leave_statuses table with defaults if it doesn't exist
+    const leaveStatusesTable = db!.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='leave_statuses'")
+    if (leaveStatusesTable.length === 0) {
+      db!.run(`
+        CREATE TABLE IF NOT EXISTS leave_statuses (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          is_active INTEGER DEFAULT 1,
+          created_at TEXT DEFAULT (datetime('now'))
+        )
+      `)
+      const defaultStatuses = ['في الانتظار', 'معتمد', 'مرفوض']
+      defaultStatuses.forEach(s => {
+        db!.run("INSERT OR IGNORE INTO leave_statuses (name) VALUES (?)", [s])
+      })
+    }
+
+    // Add trainer_name and training_org columns to courses table if missing
+    const coursesColumnsCheck = db!.exec("PRAGMA table_info(courses)")
+    if (coursesColumnsCheck.length > 0 && coursesColumnsCheck[0].values) {
+      const cols = coursesColumnsCheck[0].values.map(c => c[1] as string)
+      if (!cols.includes('trainer_name')) {
+        db!.run("ALTER TABLE courses ADD COLUMN trainer_name TEXT")
+      }
+      if (!cols.includes('training_org')) {
+        db!.run("ALTER TABLE courses ADD COLUMN training_org TEXT")
+      }
+    }
+
+    // Add notes column to evaluations table if missing
+    const evalColumnsCheck = db!.exec("PRAGMA table_info(evaluations)")
+    if (evalColumnsCheck.length > 0 && evalColumnsCheck[0].values) {
+      const evalCols = evalColumnsCheck[0].values.map(c => c[1] as string)
+      if (!evalCols.includes('notes')) {
+        db!.run("ALTER TABLE evaluations ADD COLUMN notes TEXT")
+      }
+    }
   } catch (error) {
     console.error('Migration error:', error)
   }
+
+  // Create reward_types table with defaults if it doesn't exist
+  try {
+    const rewardTypesTable = db!.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='reward_types'")
+    if (rewardTypesTable.length === 0 || !rewardTypesTable[0]?.values?.length) {
+      db!.run(`
+        CREATE TABLE IF NOT EXISTS reward_types (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          is_active INTEGER DEFAULT 1,
+          created_at TEXT DEFAULT (datetime('now'))
+        )
+      `)
+      const defaultRewardTypes = ['مكافأة', 'تقدير', 'إنجاز', 'ابتكار', 'خاص']
+      defaultRewardTypes.forEach(t => {
+        db!.run("INSERT OR IGNORE INTO reward_types (name) VALUES (?)", [t])
+      })
+    }
+  } catch (e) { console.error('reward_types migration error:', e) }
+
+  // Create reward_statuses table with defaults if it doesn't exist
+  try {
+    const rewardStatusesTable = db!.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='reward_statuses'")
+    if (rewardStatusesTable.length === 0 || !rewardStatusesTable[0]?.values?.length) {
+      db!.run(`
+        CREATE TABLE IF NOT EXISTS reward_statuses (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          is_active INTEGER DEFAULT 1,
+          created_at TEXT DEFAULT (datetime('now'))
+        )
+      `)
+      const defaultRewardStatuses = ['مدفوع', 'في الانتظار', 'معتمد']
+      defaultRewardStatuses.forEach(s => {
+        db!.run("INSERT OR IGNORE INTO reward_statuses (name) VALUES (?)", [s])
+      })
+    }
+  } catch (e) { console.error('reward_statuses migration error:', e) }
+
+  // Create absence_types table with defaults if it doesn't exist
+  try {
+    const absenceTypesTable = db!.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='absence_types'")
+    if (absenceTypesTable.length === 0 || !absenceTypesTable[0]?.values?.length) {
+      db!.run(`
+        CREATE TABLE IF NOT EXISTS absence_types (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          is_active INTEGER DEFAULT 1,
+          created_at TEXT DEFAULT (datetime('now'))
+        )
+      `)
+      const defaultAbsenceTypes = ['غياب غير مبرر', 'تأخير', 'مغادرة مبكرة', 'عدم حضور']
+      defaultAbsenceTypes.forEach(t => {
+        db!.run("INSERT OR IGNORE INTO absence_types (name) VALUES (?)", [t])
+      })
+    }
+  } catch (e) { console.error('absence_types migration error:', e) }
+
+  // Migrate exchange_rates table - add missing columns
+  try {
+    const erCols = db!.exec("PRAGMA table_info(exchange_rates)")
+    if (erCols.length > 0 && erCols[0].values) {
+      const cols = erCols[0].values.map(c => c[1] as string)
+      if (!cols.includes('is_active')) {
+        db!.run("ALTER TABLE exchange_rates ADD COLUMN is_active INTEGER DEFAULT 0")
+      }
+      if (!cols.includes('note')) {
+        db!.run("ALTER TABLE exchange_rates ADD COLUMN note TEXT")
+      }
+    }
+  } catch (e) {}
 
   // Migrate auth system
   try {
@@ -721,11 +999,12 @@ async function createSchema() {
       employee_name TEXT,
       title TEXT NOT NULL,
       description TEXT,
-      kind TEXT CHECK(kind IN ('مكافأة', 'تقدير', 'إنجاز', 'ابتكار', 'خاص')),
-      category TEXT CHECK(category IN ('شهري', 'سنوي', 'ربع سنوي', 'خاص')),
+      kind TEXT,
       amount_usd REAL,
       reward_date TEXT NOT NULL,
-      status TEXT CHECK(status IN ('مدفوع', 'في الانتظار', 'معتمد')) DEFAULT 'في الانتظار',
+      status TEXT DEFAULT 'في الانتظار',
+      reward_currency TEXT DEFAULT 'USD',
+      notes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT,
       FOREIGN KEY (employee_id) REFERENCES employees(id)
@@ -775,6 +1054,64 @@ async function createSchema() {
       updated_at TEXT,
       FOREIGN KEY (employee_id) REFERENCES employees(id),
       FOREIGN KEY (evaluator_id) REFERENCES employees(id)
+    );
+
+    -- Departments, Units, Committees (entity tables)
+    CREATE TABLE IF NOT EXISTS departments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS units (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT,
+      department_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      FOREIGN KEY (department_id) REFERENCES departments(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS committees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT
+    );
+
+    -- Employee multi-role pivot tables
+    CREATE TABLE IF NOT EXISTS employee_departments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      employee_id INTEGER NOT NULL,
+      department_id INTEGER NOT NULL,
+      job_title TEXT,
+      is_primary INTEGER DEFAULT 0,
+      FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+      FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS employee_units (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      employee_id INTEGER NOT NULL,
+      unit_id INTEGER NOT NULL,
+      job_title TEXT,
+      is_primary INTEGER DEFAULT 0,
+      FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+      FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS employee_committees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      employee_id INTEGER NOT NULL,
+      committee_id INTEGER NOT NULL,
+      role_title TEXT,
+      is_primary INTEGER DEFAULT 0,
+      FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+      FOREIGN KEY (committee_id) REFERENCES committees(id) ON DELETE CASCADE
     );
 
     -- Courses

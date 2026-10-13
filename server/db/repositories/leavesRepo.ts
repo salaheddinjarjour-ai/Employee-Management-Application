@@ -1,4 +1,4 @@
-import { query, queryOne } from '../mssql-connection'
+import { query, queryOne } from '../connection'
 
 export type NewLeave = {
   employee_id: number

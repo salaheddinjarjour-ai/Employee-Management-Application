@@ -5,6 +5,15 @@ export interface ElectronAPI {
   getVersion: () => Promise<string>
   getPlatform: () => Promise<string>
 
+  // Authentication
+  auth: {
+    isFirstRun: () => Promise<{ isFirstRun: boolean }>
+    createAdmin: (username: string, password: string) => Promise<any>
+    login: (username: string, password: string) => Promise<any>
+    logout: () => Promise<any>
+    getCurrentUser: () => Promise<any>
+  }
+
   // Database operations
   createRecord: (entity: string, payload: any) => Promise<{ id: number }>
   listRecords: (entity: string, filters?: any) => Promise<any[]>
@@ -24,16 +33,48 @@ export interface ElectronAPI {
   payrollListByEmployee: (employeeId: number, period?: string, limit?: number) => Promise<any[]>
   payrollTotalsByEmployee: (employeeId: number, period?: string) => Promise<any[]>
   payrollSave: (payload: any) => Promise<any>
-  payrollSave: (payload: any) => Promise<any>
   payrollDelete: (params: { employee_id: number, period: string } | number) => Promise<any>
 
   // Employees & Global
+  listEmployees: () => Promise<any[]>
+  listEmployeesBasic: () => Promise<any[]>
+  getEmployee: (id: number) => Promise<any>
+  getEmployeeProfile: (id: number) => Promise<any>
   searchEmployees: (query: string) => Promise<any[]>
+  exportEmployees: (options?: any) => Promise<{ success: boolean; filePath?: string; count?: number; canceled?: boolean; error?: string }>
   employees: {
     getAll: () => Promise<any[]>
     getSalaryDefaults: (id: number) => Promise<any>
     get: (id: number) => Promise<any>
     search: (query: string) => Promise<any[]>
+  }
+
+  // Dashboard
+  getDashboardSummary: (period?: string) => Promise<any>
+
+  // Leaves
+  listLeaves: () => Promise<any[]>
+  createLeave: (data: any) => Promise<any>
+  leavesStats: () => Promise<any>
+
+  // Absences
+  listAbsences: () => Promise<any[]>
+  createAbsence: (data: any) => Promise<any>
+
+  // Evaluations
+  createEvaluation: (data: any) => Promise<any>
+  listEvaluations: () => Promise<any[]>
+  updateEvaluation: (id: number, data: any) => Promise<any>
+  deleteEvaluation: (id: number) => Promise<any>
+  evaluationsStats: () => Promise<any>
+
+  // Settings
+  getSettings: () => Promise<Record<string, any>>
+  saveSettings: (data: Record<string, any>) => Promise<any>
+
+  // Backup
+  backup: {
+    createManual: () => Promise<{ success: boolean; path?: string; error?: string }>
   }
 
   // Files
@@ -44,13 +85,6 @@ export interface ElectronAPI {
     open: (id: number) => Promise<any>
     choose: () => Promise<any>
   }
-
-  // Evaluations
-  listEvaluations: () => Promise<any[]>
-  createEvaluation: (data: any) => Promise<any>
-  updateEvaluation: (id: number, data: any) => Promise<any>
-  deleteEvaluation: (id: number) => Promise<any>
-  evaluationsStats: () => Promise<{ totals: any, dist: any[] }>
 
   // Promotions
   listPromotions: () => Promise<any[]>
@@ -101,6 +135,7 @@ export interface ElectronAPI {
   runContractTest: () => Promise<any>
   openPath: (path: string) => Promise<any>
   isFirstRun: () => Promise<boolean>
+  onDbConnectionFailed?: (callback: (error: any) => void) => (() => void) | undefined
   // Generic invoke for legacy/IPC compatibility
   invoke: (channel: string, ...args: any[]) => Promise<any>
 }

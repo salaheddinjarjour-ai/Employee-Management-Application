@@ -18,6 +18,7 @@ export function ReportsPage() {
   const [showPrintPreview, setShowPrintPreview] = useState(false)
   const [previewHtml, setPreviewHtml] = useState('')
   const [recentReports, setRecentReports] = useState<any[]>([])
+  const [generatedCount, setGeneratedCount] = useState(0)
 
   const reportTemplates: ReportTemplate[] = [
     {
@@ -26,7 +27,7 @@ export function ReportsPage() {
       description: 'تقرير شامل بجميع بيانات الموظفين',
       category: 'hr',
       icon: <Users className="w-6 h-6" />,
-      fields: ['الاسم', 'المنصب', 'القسم', 'تاريخ التوظيف', 'الراتب']
+      fields: ['الاسم', 'المسمى الوظيفي', 'القسم', 'تاريخ التوظيف', 'الراتب']
     },
     {
       id: 'payroll-summary',
@@ -109,7 +110,12 @@ export function ReportsPage() {
     : reportTemplates.filter(r => r.category === selectedCategory)
 
   /* State for filters */
-  const [startDate, setStartDate] = useState<string>(new Date().toISOString().slice(0, 8) + '01') // Start of current month
+  const [startDate, setStartDate] = useState<string>(() => {
+    // Default to one year ago
+    const d = new Date()
+    d.setFullYear(d.getFullYear() - 1)
+    return d.toISOString().slice(0, 10)
+  })
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().slice(0, 10)) // Today
 
   // Load recent reports
@@ -170,23 +176,33 @@ export function ReportsPage() {
       switch (reportId) {
         case 'employee-list': {
           const emps = await window.api.listRecords('employees') || []
+          // Try to get the latest salary for each employee from all payroll headers
+          const payrolls = await window.api.invoke('payroll:listByMonth', 'all').catch(() => []) || []
+          const salaryMap: Record<number, number> = {}
+          // payrolls are ordered DESC so first entry per employee = most recent
+          payrolls.forEach((p: any) => {
+            const h = p.header || p
+            if (h.employee_id && h.base_min && !salaryMap[h.employee_id]) {
+              salaryMap[h.employee_id] = Number(h.base_min)
+            }
+          })
           if (reportLang === 'ar') {
-            headers = ['الاسم', 'المنصب', 'القسم', 'تاريخ التوظيف', 'الراتب']
+            headers = ['الاسم', 'المسمى الوظيفي', 'القسم', 'تاريخ التوظيف', 'الراتب']
             reportData = emps.map((e: any) => ({
               'الاسم': e.full_name || e.name,
-              'المنصب': e.job_title,
-              'القسم': e.department,
-              'تاريخ التوظيف': e.join_date,
-              'الراتب': e.basic_salary
+              'المسمى الوظيفي': e.job_title || '-',
+              'القسم': e.department || '-',
+              'تاريخ التوظيف': e.hire_date || e.join_date || '-',
+              'الراتب': salaryMap[e.id] || e.basic_salary || '-'
             }))
           } else {
             headers = ['Name', 'Job Title', 'Department', 'Hire Date', 'Salary']
             reportData = emps.map((e: any) => ({
               'Name': e.full_name || e.name,
-              'Job Title': e.job_title,
-              'Department': e.department,
-              'Hire Date': e.join_date,
-              'Salary': e.basic_salary
+              'Job Title': e.job_title || '-',
+              'Department': e.department || '-',
+              'Hire Date': e.hire_date || e.join_date || '-',
+              'Salary': salaryMap[e.id] || e.basic_salary || '-'
             }))
           }
           break
@@ -293,45 +309,126 @@ export function ReportsPage() {
         case 'promotions-report': {
           const promos = await window.api.listRecords('promotions') || []
           const filtered = promos.filter((p: any) => {
-            const rawDate = p.promotion_date || p.date || p.created_at
+            const rawDate = p.effective_date || p.created_at
             const d = normalizeDate(rawDate)
             return d && d >= startDate && d <= endDate
           })
 
           if (reportLang === 'ar') {
-            headers = ['الموظف', 'المنصب السابق', 'المنصب الجديد', 'تاريخ الترقية', 'زيادة الراتب']
+            headers = ['الموظف', 'المسمى السابق', 'المسمى الجديد', 'تاريخ السريان', 'زيادة الراتب']
             reportData = filtered.map((p: any) => ({
               'الموظف': p.employee_name,
-              'المنصب السابق': p.from_title || p.old_job_title || '-',
-              'المنصب الجديد': p.to_title || p.new_job_title || '-',
-              'تاريخ الترقية': p.promotion_date || normalizeDate(p.created_at) || '-',
-              'زيادة الراتب': (p.new_salary || 0) - (p.old_salary || 0)
+              'المسمى السابق': p.from_title || '-',
+              'المسمى الجديد': p.to_title || '-',
+              'تاريخ السريان': p.effective_date || normalizeDate(p.created_at) || '-',
+              'زيادة الراتب': p.increase_amount_usd ? `${p.increase_amount_usd} ${p.increase_currency || 'USD'}` : (p.increase_percent ? `${p.increase_percent}%` : '-')
             }))
           } else {
-            headers = ['Employee', 'Previous Title', 'New Title', 'Promotion Date', 'Salary Increase']
+            headers = ['Employee', 'Previous Title', 'New Title', 'Effective Date', 'Salary Increase']
             reportData = filtered.map((p: any) => ({
               'Employee': p.employee_name,
-              'Previous Title': p.from_title || p.old_job_title || '-',
-              'New Title': p.to_title || p.new_job_title || '-',
-              'Promotion Date': p.promotion_date || normalizeDate(p.created_at) || '-',
-              'Salary Increase': (p.new_salary || 0) - (p.old_salary || 0)
+              'Previous Title': p.from_title || '-',
+              'New Title': p.to_title || '-',
+              'Effective Date': p.effective_date || normalizeDate(p.created_at) || '-',
+              'Salary Increase': p.increase_amount_usd ? `${p.increase_amount_usd} ${p.increase_currency || 'USD'}` : (p.increase_percent ? `${p.increase_percent}%` : '-')
+            }))
+          }
+          break
+        }
+        case 'performance-review': {
+          const evals = await window.electronAPI.listEvaluations?.() || []
+          const filtered = evals.filter((ev: any) => {
+            const d = normalizeDate(ev.evaluation_date || ev.created_at)
+            return d && d >= startDate && d <= endDate
+          })
+
+          if (reportLang === 'ar') {
+            headers = ['الموظف', 'المقيم', 'الفترة', 'النتيجة', 'التقييم', 'الحالة']
+            reportData = filtered.map((ev: any) => ({
+              'الموظف': ev.employee_name,
+              'المقيم': ev.evaluator_name,
+              'الفترة': ev.period,
+              'النتيجة': `${ev.overall_score}%`,
+              'التقييم': ev.rating,
+              'الحالة': ev.status
+            }))
+          } else {
+            headers = ['Employee', 'Evaluator', 'Period', 'Score', 'Rating', 'Status']
+            reportData = filtered.map((ev: any) => ({
+              'Employee': ev.employee_name,
+              'Evaluator': ev.evaluator_name,
+              'Period': ev.period,
+              'Score': `${ev.overall_score}%`,
+              'Rating': ev.rating,
+              'Status': ev.status
+            }))
+          }
+          break
+        }
+        case 'training-report': {
+          const courses = await window.api.listRecords('courses') || []
+          const filtered = courses.filter((c: any) => {
+            const d = normalizeDate(c.start_date || c.created_at)
+            return d && d >= startDate && d <= endDate
+          })
+
+          if (reportLang === 'ar') {
+            headers = ['الدورة', 'المدرب', 'تاريخ البداية', 'تاريخ الانتهاء', 'الحالة']
+            reportData = filtered.map((c: any) => ({
+              'الدورة': c.title || c.course_name,
+              'المدرب': c.instructor || c.trainer_name || '-',
+              'تاريخ البداية': c.start_date || '-',
+              'تاريخ الانتهاء': c.end_date || '-',
+              'الحالة': c.status || '-'
+            }))
+          } else {
+            headers = ['Course', 'Instructor', 'Start Date', 'End Date', 'Status']
+            reportData = filtered.map((c: any) => ({
+              'Course': c.title || c.course_name,
+              'Instructor': c.instructor || c.trainer_name || '-',
+              'Start Date': c.start_date || '-',
+              'End Date': c.end_date || '-',
+              'Status': c.status || '-'
+            }))
+          }
+          break
+        }
+        case 'attendance-report': {
+          const absences = await window.api.listRecords('absences') || []
+          const filtered = absences.filter((a: any) => {
+            const d = normalizeDate(a.from_date || a.absence_date || a.created_at)
+            return d && d >= startDate && d <= endDate
+          })
+
+          if (reportLang === 'ar') {
+            headers = ['الموظف', 'نوع الغياب', 'من', 'إلى', 'عدد الأيام', 'الحالة']
+            reportData = filtered.map((a: any) => ({
+              'الموظف': a.employee_name,
+              'نوع الغياب': a.absence_type || a.type || '-',
+              'من': a.from_date || '-',
+              'إلى': a.to_date || '-',
+              'عدد الأيام': a.days_count || a.days || 1,
+              'الحالة': a.status || '-'
+            }))
+          } else {
+            headers = ['Employee', 'Type', 'From', 'To', 'Days', 'Status']
+            reportData = filtered.map((a: any) => ({
+              'Employee': a.employee_name,
+              'Type': a.absence_type || a.type || '-',
+              'From': a.from_date || '-',
+              'To': a.to_date || '-',
+              'Days': a.days_count || a.days || 1,
+              'Status': a.status || '-'
             }))
           }
           break
         }
         default:
-          // Fallback to template fields for other reports (assumed Arabic for now or implement similarly)
           headers = template.fields
           reportData = []
       }
 
-      // Create print window
-      const printWindow = window.open('', '_blank')
-      if (!printWindow) {
-        alert('يرجى السماح بالنوافذ المنبثقة للطباعة')
-        return
-      }
-
+      // Build HTML for in-app preview
       const html = `
         <!DOCTYPE html>
         <html dir="rtl" lang="ar">
@@ -380,7 +477,7 @@ export function ReportsPage() {
               </div>
             </div>
             <div class="report-info">
-              <div><strong>تاريخ الطباعة (ميلادي):</strong> ${formatGregorianDate(new Date().toISOString())}</div>
+              <div><strong>تاريخ الطباعة:</strong> ${formatGregorianDate(new Date().toISOString())}</div>
               <div><strong>الفترة:</strong> ${formatGregorianDate(startDate)} - ${formatGregorianDate(endDate)}</div>
               <div><strong>نوع التقرير:</strong> ${template.category}</div>
             </div>
@@ -392,12 +489,10 @@ export function ReportsPage() {
 
             <table>
               <thead>
-              <tr>
                 <tr>
                   ${headers.map(f => `<th>${f}</th>`).join('')}
                 </tr>
-              </tr>
-            </thead>
+              </thead>
             <tbody>
                 ${reportData.length > 0 ? reportData.map(row => `
                   <tr>
@@ -416,19 +511,145 @@ export function ReportsPage() {
           </div>
 
           <div class="footer">
-            <div>${reportLang === 'ar' ? 'تم الإنشاء بواسطة:' : 'Generated by:'} <strong>${settings?.preparedBy || 'System'}</strong></div>
+            <div></div>
             <div>${reportLang === 'ar' ? 'صفحة' : 'Page'} 1</div>
           </div>
         </body>
         </html>
       `
 
-      // Show print preview instead of direct print
       setPreviewHtml(html)
       setShowPrintPreview(true)
+      setGeneratedCount(prev => prev + 1)
+
+      // Save metadata for recent reports
+      try {
+        await window.api.invoke('reports:save-metadata', {
+          report_type: reportId,
+          report_name: template.name,
+          parameters: JSON.stringify({ startDate, endDate }),
+          row_count: reportData.length,
+          generated_at: new Date().toISOString()
+        })
+        const updated = await window.api.invoke('reports:recent') || []
+        setRecentReports(updated)
+      } catch (e) { console.warn('metadata save skipped:', e) }
     } catch (error) {
       console.error('Failed to generate report:', error)
       alert('حدث خطأ أثناء إنشاء التقرير: ' + String(error))
+    }
+  }
+
+  const exportCSV = async (reportId: string) => {
+    const template = reportTemplates.find(r => r.id === reportId)
+    if (!template) return
+
+    try {
+      // Re-use the same data fetching logic by generating the report first
+      let reportData: any[] = []
+      let headers: string[] = []
+
+      const normalizeDate = (dateVal: any): string | null => {
+        if (!dateVal) return null
+        try {
+          if (typeof dateVal === 'string' && dateVal.match(/^\d{4}-\d{2}-\d{2}/)) return dateVal.slice(0, 10)
+          return new Date(dateVal).toISOString().slice(0, 10)
+        } catch { return null }
+      }
+
+      switch (reportId) {
+        case 'employee-list': {
+          const emps = await window.api.listRecords('employees') || []
+          headers = reportLang === 'ar' ? ['الاسم', 'المسمى الوظيفي', 'القسم', 'تاريخ التوظيف', 'الراتب'] : ['Name', 'Job Title', 'Department', 'Hire Date', 'Salary']
+          reportData = emps.map((e: any) => reportLang === 'ar'
+            ? { 'الاسم': e.full_name, 'المسمى الوظيفي': e.job_title, 'القسم': e.department, 'تاريخ التوظيف': e.hire_date || e.join_date, 'الراتب': e.basic_salary }
+            : { 'Name': e.full_name, 'Job Title': e.job_title, 'Department': e.department, 'Hire Date': e.hire_date || e.join_date, 'Salary': e.basic_salary })
+          break
+        }
+        case 'payroll-summary': {
+          const month = startDate.slice(0, 7)
+          const payrolls = await window.api.invoke('payroll:listByMonth', month) || []
+          headers = reportLang === 'ar' ? ['الموظف', 'الراتب الأساسي', 'البدلات', 'الصافي'] : ['Employee', 'Basic', 'Allowances', 'Net']
+          reportData = payrolls.map((p: any) => {
+            const h = p.header || p, lines = p.lines || []
+            const basic = Number(h.base_min || 0)
+            const allowances = lines.filter((l: any) => l.category === 'allowance' || l.category === 'exception').reduce((s: number, l: any) => s + (Number(l.amount) || 0), 0)
+            const deductions = lines.filter((l: any) => l.category === 'deduction').reduce((s: number, l: any) => s + (Number(l.amount) || 0), 0)
+            return reportLang === 'ar'
+              ? { 'الموظف': h.employee_name, 'الراتب الأساسي': basic, 'البدلات': allowances, 'الصافي': basic + allowances - deductions }
+              : { 'Employee': h.employee_name, 'Basic': basic, 'Allowances': allowances, 'Net': basic + allowances - deductions }
+          })
+          break
+        }
+        case 'performance-review': {
+          const evals = await window.electronAPI.listEvaluations?.() || []
+          const filteredEvals = evals.filter((ev: any) => {
+            const d = normalizeDate(ev.evaluation_date || ev.created_at)
+            return d && d >= startDate && d <= endDate
+          })
+          headers = reportLang === 'ar' ? ['الموظف', 'المقيم', 'الفترة', 'النتيجة', 'التقييم', 'الحالة'] : ['Employee', 'Evaluator', 'Period', 'Score', 'Rating', 'Status']
+          reportData = filteredEvals.map((ev: any) => reportLang === 'ar'
+            ? { 'الموظف': ev.employee_name, 'المقيم': ev.evaluator_name, 'الفترة': ev.period, 'النتيجة': `${ev.overall_score}%`, 'التقييم': ev.rating, 'الحالة': ev.status }
+            : { 'Employee': ev.employee_name, 'Evaluator': ev.evaluator_name, 'Period': ev.period, 'Score': `${ev.overall_score}%`, 'Rating': ev.rating, 'Status': ev.status })
+          break
+        }
+        case 'training-report': {
+          const courses = await window.api.listRecords('courses') || []
+          const filteredCourses = courses.filter((c: any) => {
+            const d = normalizeDate(c.start_date || c.created_at)
+            return d && d >= startDate && d <= endDate
+          })
+          headers = reportLang === 'ar' ? ['الدورة', 'المدرب', 'تاريخ البداية', 'تاريخ الانتهاء', 'الحالة'] : ['Course', 'Instructor', 'Start Date', 'End Date', 'Status']
+          reportData = filteredCourses.map((c: any) => reportLang === 'ar'
+            ? { 'الدورة': c.title || c.course_name, 'المدرب': c.instructor || c.trainer_name || '-', 'تاريخ البداية': c.start_date || '-', 'تاريخ الانتهاء': c.end_date || '-', 'الحالة': c.status || '-' }
+            : { 'Course': c.title || c.course_name, 'Instructor': c.instructor || c.trainer_name || '-', 'Start Date': c.start_date || '-', 'End Date': c.end_date || '-', 'Status': c.status || '-' })
+          break
+        }
+        case 'attendance-report': {
+          const absences = await window.api.listRecords('absences') || []
+          const filteredAbs = absences.filter((a: any) => {
+            const d = normalizeDate(a.from_date || a.absence_date || a.created_at)
+            return d && d >= startDate && d <= endDate
+          })
+          headers = reportLang === 'ar' ? ['الموظف', 'نوع الغياب', 'من', 'إلى', 'عدد الأيام', 'الحالة'] : ['Employee', 'Type', 'From', 'To', 'Days', 'Status']
+          reportData = filteredAbs.map((a: any) => reportLang === 'ar'
+            ? { 'الموظف': a.employee_name, 'نوع الغياب': a.absence_type || a.type || '-', 'من': a.from_date || '-', 'إلى': a.to_date || '-', 'عدد الأيام': a.days_count || a.days || 1, 'الحالة': a.status || '-' }
+            : { 'Employee': a.employee_name, 'Type': a.absence_type || a.type || '-', 'From': a.from_date || '-', 'To': a.to_date || '-', 'Days': a.days_count || a.days || 1, 'Status': a.status || '-' })
+          break
+        }
+        default: {
+          // For other reports, use the template fields
+          headers = template.fields
+          reportData = []
+        }
+      }
+
+      if (reportData.length === 0) {
+        alert(reportLang === 'ar' ? 'لا توجد بيانات للتصدير' : 'No data to export')
+        return
+      }
+
+      // Build CSV
+      const csvRows = [headers.join(',')]
+      reportData.forEach(row => {
+        csvRows.push(headers.map(h => {
+          const val = String(row[h] ?? '')
+          return val.includes(',') || val.includes('"') || val.includes('\n') ? `"${val.replace(/"/g, '""')}"` : val
+        }).join(','))
+      })
+
+      const BOM = '\uFEFF'
+      const blob = new Blob([BOM + csvRows.join('\n')], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${template.name}_${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      setGeneratedCount(prev => prev + 1)
+    } catch (error) {
+      console.error('CSV export failed:', error)
+      alert('فشل تصدير الملف')
     }
   }
 
@@ -500,8 +721,8 @@ export function ReportsPage() {
           <div className="flex items-center">
             <BarChart3 className="w-8 h-8 text-green-600" />
             <div className="mr-4">
-              <h3 className="text-sm font-medium text-gray-500">تقارير هذا الشهر</h3>
-              <p className="text-2xl font-bold text-green-600">12</p>
+              <h3 className="text-sm font-medium text-gray-500">التقارير المولّدة</h3>
+              <p className="text-2xl font-bold text-green-600">{generatedCount}</p>
             </div>
           </div>
         </div>
@@ -510,8 +731,8 @@ export function ReportsPage() {
           <div className="flex items-center">
             <TrendingUp className="w-8 h-8 text-purple-600" />
             <div className="mr-4">
-              <h3 className="text-sm font-medium text-gray-500">التقارير المجدولة</h3>
-              <p className="text-2xl font-bold text-purple-600">5</p>
+              <h3 className="text-sm font-medium text-gray-500">الفئات المتاحة</h3>
+              <p className="text-2xl font-bold text-purple-600">{categories.length - 1}</p>
             </div>
           </div>
         </div>
@@ -520,8 +741,8 @@ export function ReportsPage() {
           <div className="flex items-center">
             <Download className="w-8 h-8 text-orange-600" />
             <div className="mr-4">
-              <h3 className="text-sm font-medium text-gray-500">التحميلات</h3>
-              <p className="text-2xl font-bold text-orange-600">47</p>
+              <h3 className="text-sm font-medium text-gray-500">التقارير الأخيرة</h3>
+              <p className="text-2xl font-bold text-orange-600">{recentReports.length}</p>
             </div>
           </div>
         </div>
@@ -600,7 +821,8 @@ export function ReportsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => generateReport(report.id)}
+                  onClick={() => exportCSV(report.id)}
+                  title="تصدير CSV"
                 >
                   <Download className="w-4 h-4" />
                 </Button>
@@ -665,13 +887,9 @@ export function ReportsPage() {
               <div className="flex items-center gap-2">
                 <Button
                   onClick={() => {
-                    const printWindow = window.open('', '_blank')
-                    if (printWindow) {
-                      printWindow.document.write(previewHtml)
-                      printWindow.document.close()
-                      printWindow.onload = () => {
-                        setTimeout(() => printWindow.print(), 500)
-                      }
+                    const iframe = document.querySelector('iframe[title="Print Preview"]') as HTMLIFrameElement
+                    if (iframe && iframe.contentWindow) {
+                      iframe.contentWindow.print()
                     }
                   }}
                 >

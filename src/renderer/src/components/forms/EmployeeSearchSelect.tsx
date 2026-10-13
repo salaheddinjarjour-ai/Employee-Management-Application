@@ -5,7 +5,8 @@ import { cn } from '../../lib/utils'
 
 interface Employee {
     id: number
-    name: string
+    full_name: string
+    name?: string
     employee_no: string | number
     job_title?: string
 }
@@ -31,17 +32,26 @@ export function EmployeeSearchSelect({
     const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
     const [options, setOptions] = useState<Employee[]>([])
     const [loading, setLoading] = useState(false)
-    const [open, setOpen] = useState(false)
     const dropdownRef = useRef<HTMLDivElement>(null)
 
-    // Use debounce for search
+    // Load all employees on mount (so dropdown is usable without typing)
+    useEffect(() => {
+        const loadAll = async () => {
+            try {
+                const results = await window.electronAPI.searchEmployees('')
+                setOptions(results || [])
+            } catch (err) {
+                console.error('Initial employee load failed:', err)
+            }
+        }
+        loadAll()
+    }, [])
+
+    // Debounced search when user types
     useEffect(() => {
         const timeoutId = setTimeout(async () => {
-            if (!query && !open) return
-
             setLoading(true)
             try {
-                // @ts-ignore
                 const results = await window.electronAPI.searchEmployees(query)
                 setOptions(results || [])
             } catch (err) {
@@ -53,19 +63,22 @@ export function EmployeeSearchSelect({
         }, 300)
 
         return () => clearTimeout(timeoutId)
-    }, [query, open])
+    }, [query])
 
-    // Initial fetch for empty query or specific ID
+    // Fetch employee when selectedId changes (including when editing different record)
     useEffect(() => {
+        if (!selectedId) {
+            setSelectedEmployee(null)
+            return
+        }
         const fetchInitial = async () => {
-            if (selectedId && !selectedEmployee) {
-                try {
-                    // @ts-ignore
-                    const emp = await window.electronAPI.getEmployee(selectedId)
-                    if (emp) setSelectedEmployee(emp)
-                } catch (e) {
-                    console.error(e)
-                }
+            try {
+                const emp = await window.electronAPI.getEmployee(selectedId)
+                if (emp) setSelectedEmployee(emp)
+                else setSelectedEmployee(null)
+            } catch (e) {
+                console.error(e)
+                setSelectedEmployee(null)
             }
         }
         fetchInitial()
@@ -90,7 +103,7 @@ export function EmployeeSearchSelect({
                     <div className="relative w-full cursor-default overflow-hidden rounded-lg bg-white text-right shadow-sm border border-gray-300 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 sm:text-sm">
                         <Combobox.Input
                             className="w-full border-none py-2 pl-3 pr-10 text-sm leading-5 text-gray-900 focus:ring-0"
-                            displayValue={(emp: any) => emp ? `${emp.name} (${emp.employee_no})` : ''}
+                            displayValue={(emp: any) => emp ? `${emp.full_name || emp.name || ''} (${emp.employee_no})` : ''}
                             onChange={(event) => setQuery(event.target.value)}
                             placeholder={placeholder}
                         />
@@ -126,7 +139,7 @@ export function EmployeeSearchSelect({
                                                 className={`block truncate text-right ${selected ? 'font-medium' : 'font-normal'
                                                     }`}
                                             >
-                                                {person.name} <span className="text-gray-500 text-xs mr-2">#{person.employee_no}</span>
+                                                {person.full_name || person.name} <span className="text-gray-500 text-xs mr-2">#{person.employee_no}</span>
                                             </span>
                                             {selected ? (
                                                 <span

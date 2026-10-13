@@ -45,9 +45,9 @@ export const reportsHandlers = {
             const params = [
                 metadata.report_type,
                 metadata.report_name,
-                metadata.file_path,
+                metadata.file_path || '',
                 metadata.file_size || 0,
-                metadata.parameters ? JSON.stringify(metadata.parameters) : null,
+                typeof metadata.parameters === 'string' ? metadata.parameters : (metadata.parameters ? JSON.stringify(metadata.parameters) : null),
                 metadata.generated_by || 'system'
             ]
 

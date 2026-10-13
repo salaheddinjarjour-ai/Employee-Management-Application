@@ -26,11 +26,24 @@ export default function PayrollBuilder({
   onClose
 }: PayrollBuilderProps) {
   const [saving, setSaving] = useState(false)
-  const [selectedEmployee, setSelectedEmployee] = useState<EmployeeLite | null>(null)
+  const [localPeriod, setLocalPeriod] = useState(() => initial?.header?.period || period)
+  const [selectedEmployee, setSelectedEmployee] = useState<EmployeeLite | null>(() => {
+    // Pre-populate from initial header if editing an existing payroll
+    if (initial?.header && initial.header.employee_id) {
+      return {
+        id: initial.header.employee_id,
+        full_name: (initial.header as any).employee_name || '',
+        employee_no: (initial.header as any).id_number || String(initial.header.employee_id),
+        job_title: initial.header.job_title || '',
+        department: ''
+      }
+    }
+    return null
+  })
 
   const [header, setHeader] = useState<PayrollHeader>({
     employee_id: employeeId || 0,
-    period,
+    period: initial?.header?.period || period,
     id_number: initial?.header?.id_number ?? '',
     start_date: initial?.header?.start_date ?? '',
     admin_level: initial?.header?.admin_level ?? '',
@@ -46,7 +59,7 @@ export default function PayrollBuilder({
   // Multi-currency salary model
   const [salaryModel, setSalaryModel] = useState<SalaryModel>({
     employeeId: employeeId || 0,
-    period,
+    period: initial?.header?.period || period,
     minBaseAmount: initial?.header?.base_min ?? 0,
     minBaseCurrency: ((initial?.header as any)?.base_min_currency || 'TRY') as Currency,
     experienceAllowanceAmount: (initial?.header as any)?.experience_allowance_amount ?? 0,
@@ -70,7 +83,6 @@ export default function PayrollBuilder({
       if (!employeeId) return
 
       try {
-        // @ts-ignore
         const emp = await window.electronAPI.getRecord('employees', employeeId)
         if (emp) {
           setSelectedEmployee({
@@ -189,7 +201,6 @@ export default function PayrollBuilder({
 
       // Fetch full employee details to populate header
       try {
-        // @ts-ignore
         const emp = await window.electronAPI.getRecord('employees', employee.id)
         if (emp) {
           setHeader(h => ({
@@ -215,61 +226,34 @@ export default function PayrollBuilder({
               const prevHeader = mostRecent.header
               const prevLines = mostRecent.lines || []
 
-              // Pre-populate salary fields from previous payroll
+              // Pre-populate ALL header fields from previous payroll
               setHeader(h => ({
                 ...h,
-                base_min: prevHeader.base_min || h.base_min,
-                years_of_exp: prevHeader.years_of_exp || h.years_of_exp,
-                edu_required: prevHeader.edu_required || h.edu_required,
-                notes: '' // Clear notes for new period
+                base_min: prevHeader.base_min ?? h.base_min,
+                years_of_exp: prevHeader.years_of_exp ?? h.years_of_exp,
+                max_experience_years: prevHeader.max_experience_years ?? h.max_experience_years,
+                edu_required: prevHeader.edu_required ?? h.edu_required,
+                notes: prevHeader.notes ?? h.notes,
               }))
 
               // Pre-populate salary model with previous currency and amounts
               setSalaryModel(s => ({
                 ...s,
-                minBaseAmount: prevHeader.base_min || s.minBaseAmount,
+                minBaseAmount: prevHeader.base_min ?? s.minBaseAmount,
                 minBaseCurrency: ((prevHeader as any).base_min_currency || 'TRY') as Currency,
-                experienceAllowanceAmount: (prevHeader as any).experience_allowance_amount || s.experienceAllowanceAmount,
+                experienceAllowanceAmount: (prevHeader as any).experience_allowance_amount ?? s.experienceAllowanceAmount,
                 experienceAllowanceCurrency: ((prevHeader as any).experience_allowance_currency || 'TRY') as Currency,
-                yearsOfExperience: prevHeader.years_of_exp || s.yearsOfExperience
+                yearsOfExperience: prevHeader.years_of_exp ?? s.yearsOfExperience
               }))
 
-              // Pre-populate lines from previous payroll (excluding cash and indemnity which should start fresh)
-              const previousAllowances = prevLines.filter(l =>
-                l.category === 'allowance' || l.category === 'exception'
-              )
-
-              if (previousAllowances.length > 0) {
-                // Keep the default structure but update amounts from previous payroll
-                setLines(currentLines => {
-                  const updatedLines = [...currentLines]
-
-                  // Match previous allowances by label and update amounts
-                  previousAllowances.forEach(prevLine => {
-                    const existingIndex = updatedLines.findIndex(
-                      l => l.label === prevLine.label && l.category === prevLine.category
-                    )
-
-                    if (existingIndex >= 0) {
-                      // Update existing line
-                      updatedLines[existingIndex] = {
-                        ...updatedLines[existingIndex],
-                        amount: prevLine.amount,
-                        currency: prevLine.currency
-                      }
-                    } else {
-                      // Add new line if it doesn't exist
-                      updatedLines.push({
-                        category: prevLine.category,
-                        label: prevLine.label,
-                        currency: prevLine.currency,
-                        amount: prevLine.amount
-                      })
-                    }
-                  })
-
-                  return updatedLines
-                })
+              // Replace ALL lines with the previous payroll's lines (all categories)
+              if (prevLines.length > 0) {
+                setLines(prevLines.map(l => ({
+                  category: l.category,
+                  label: l.label,
+                  currency: l.currency,
+                  amount: l.amount
+                })))
               }
 
               toast.success(`تم تحميل بيانات الراتب السابقة للموظف ${employee.full_name}`)
@@ -344,7 +328,7 @@ export default function PayrollBuilder({
     }
   }
 
-  const formatMoney = (amount: number) => amount.toFixed(2)
+  const formatMoney = (amount: number) => amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   const getCategoryLabel = (category: string) => {
     const labels = {
@@ -375,11 +359,27 @@ export default function PayrollBuilder({
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">بناء الراتب</h2>
-            <p className="text-gray-600">{selectedEmployee?.full_name || 'لم يتم اختيار موظف'} - {period}</p>
+            <p className="text-gray-600">{selectedEmployee?.full_name || 'لم يتم اختيار موظف'}</p>
           </div>
           {onClose && (
             <Button variant="outline" onClick={onClose}>إغلاق</Button>
           )}
+        </div>
+
+        {/* Period / Month selector */}
+        <div className="mb-4 max-w-xs">
+          <label className="block text-sm font-medium text-gray-700 mb-1">شهر الراتب</label>
+          <input
+            type="month"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            value={localPeriod}
+            onChange={e => {
+              const val = e.target.value
+              setLocalPeriod(val)
+              setHeader(h => ({ ...h, period: val }))
+              setSalaryModel(s => ({ ...s, period: val }))
+            }}
+          />
         </div>
 
         {/* Employee Selection */}
@@ -584,11 +584,11 @@ export default function PayrollBuilder({
               </div>
               <div className="space-y-2">
                 {categoryLines.map(({ line, index }) => (
-                  <div key={index} className="flex items-center gap-3 bg-white p-3 rounded border">
+                  <div key={index} className="flex items-center gap-2 bg-white p-3 rounded border">
                     <input
                       type="text"
                       placeholder="اسم البند"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                       value={line.label}
                       onChange={e => updateLine(index, 'label', e.target.value)}
                     />
@@ -597,22 +597,21 @@ export default function PayrollBuilder({
                       value={line.amount}
                       currency={line.currency as Currency}
                       onChange={({ value, currency }) => {
-                        // Batch update to avoid partial states
                         setLines(ls => ls.map((l, i) =>
                           i === index ? { ...l, amount: value, currency } : l
                         ))
                       }}
-                      className="w-48"
+                      className="shrink-0 w-40"
                     />
 
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    <button
+                      type="button"
                       onClick={() => removeLine(index)}
-                      className="text-red-600 hover:text-red-700"
+                      title="حذف البند"
+                      className="shrink-0 p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
-                    </Button>
+                    </button>
                   </div>
                 ))}
               </div>

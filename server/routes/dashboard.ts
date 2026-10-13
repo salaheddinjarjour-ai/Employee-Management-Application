@@ -1,6 +1,6 @@
 
 import express from 'express';
-import { query, queryOne } from '../db/mssql-connection';
+import { query, queryOne } from '../db/connection';
 
 const router = express.Router();
 

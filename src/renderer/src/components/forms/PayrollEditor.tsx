@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -12,6 +12,7 @@ import { Separator } from '../ui/separator'
 import { Calculator, DollarSign, Minus, Plus, Save, X } from 'lucide-react'
 import { formatCurrency } from '../../utils/currency'
 import { useAppStore } from '../../store/appStore'
+import { EmployeeSearchSelect } from './EmployeeSearchSelect'
 
 // Payroll form schema with comprehensive validation
 const payrollSchema = z.object({
@@ -59,7 +60,6 @@ interface PayrollEditorProps {
 export function PayrollEditor({ employee, onSave, onCancel }: PayrollEditorProps) {
   const { currencyView, activeRate } = useAppStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [employees, setEmployees] = useState<any[]>([])
   
   // Form with default values
   const form = useForm<PayrollFormData>({
@@ -91,22 +91,6 @@ export function PayrollEditor({ employee, onSave, onCancel }: PayrollEditorProps
 
   // Watch all form values for live calculations
   const watchedValues = watch()
-
-  // Load employees list for selection
-  useEffect(() => {
-    const loadEmployees = async () => {
-      try {
-        const employeesList = await window.electronAPI.employees.list()
-        setEmployees(employeesList)
-      } catch (error) {
-        console.error('Failed to load employees:', error)
-      }
-    }
-    
-    if (!employee) {
-      loadEmployees()
-    }
-  }, [employee])
 
   // Live calculations
   const calculations = React.useMemo(() => {
@@ -207,27 +191,11 @@ export function PayrollEditor({ employee, onSave, onCancel }: PayrollEditorProps
           <CardContent>
             <div className="space-y-4">
               <div>
-                <Label htmlFor="employee_id" className="text-right block mb-2">
-                  الموظف *
-                </Label>
-                <Select
-                  value={watchedValues.employee_id?.toString()}
-                  onValueChange={(value) => setValue('employee_id', parseInt(value))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="اختر موظف" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees.map((emp) => (
-                      <SelectItem key={emp.id} value={emp.id.toString()}>
-                        {emp.full_name} - {emp.employee_no}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.employee_id && (
-                  <p className="text-red-500 text-sm mt-1 text-right">{errors.employee_id.message}</p>
-                )}
+                <EmployeeSearchSelect
+                  selectedId={watchedValues.employee_id || null}
+                  onSelect={(emp) => setValue('employee_id', emp?.id || 0)}
+                  error={errors.employee_id?.message}
+                />
               </div>
               
               <div>

@@ -1,15 +1,30 @@
 import React, { useEffect, useState } from 'react'
 import { useAppStore } from '@/store/appStore'
 import { useDashboardSummary } from '@/hooks/useDashboardSummary'
-import { Users, DollarSign, TrendingUp, Activity, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react'
+import { Users, DollarSign, TrendingUp, Activity, RefreshCw, CheckCircle, AlertCircle, Clock, Plane } from 'lucide-react'
 import { cn } from '../ui/utils'
 import { formatDate, formatCurrency } from '../../utils/dateFormat'
+import { arabicUnit, AR_DAYS, AR_MINUTES, AR_HOURS } from '../../utils/format'
+import { useNavigate } from 'react-router-dom'
 
 function currentYYYYMM(): string {
   const now = new Date()
   const year = now.getFullYear()
   const month = String(now.getMonth() + 1).padStart(2, '0')
   return `${year}-${month}`
+}
+
+function getMonthOptions() {
+  const months = []
+  const now = new Date()
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const arabicMonths = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
+    const label = i === 0 ? 'الشهر الحالي' : `${arabicMonths[d.getMonth()]} ${d.getFullYear()}`
+    months.push({ value, label })
+  }
+  return months
 }
 
 function timeAgo(dateStr: string): string {
@@ -20,9 +35,9 @@ function timeAgo(dateStr: string): string {
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-  if (diffMins < 60) return `منذ ${diffMins} دقيقة`
-  if (diffHours < 24) return `منذ ${diffHours} ساعة`
-  return `منذ ${diffDays} يوم`
+  if (diffMins < 60) return `منذ ${diffMins} ${arabicUnit(diffMins, AR_MINUTES)}`
+  if (diffHours < 24) return `منذ ${diffHours} ${arabicUnit(diffHours, AR_HOURS)}`
+  return `منذ ${diffDays} ${arabicUnit(diffDays, AR_DAYS)}`
 }
 
 function KindIcon({ kind }: { kind: string }) {
@@ -82,10 +97,12 @@ function StatCard({
 
 export function Dashboard() {
   const { currencyView } = useAppStore()
+  const navigate = useNavigate()
   const [selectedPeriod, setSelectedPeriod] = useState(currentYYYYMM())
   const { data, loading, error, reasons } = useDashboardSummary(selectedPeriod)
 
   const [diagnostics, setDiagnostics] = useState<any>(null)
+  const [showAllActivities, setShowAllActivities] = useState(false)
 
   // Run diagnostics on mount
   React.useEffect(() => {
@@ -140,6 +157,8 @@ export function Dashboard() {
     )
   }
 
+
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex items-center justify-between">
@@ -155,10 +174,9 @@ export function Dashboard() {
               onChange={(e) => setSelectedPeriod(e.target.value)}
               className="pl-3 pr-10 py-2 bg-background border border-border/50 rounded-lg text-sm shadow-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none appearance-none"
             >
-              <option value={currentYYYYMM()}>الشهر الحالي</option>
-              <option value="2025-09">سبتمبر 2025</option>
-              <option value="2025-08">أغسطس 2025</option>
-              <option value="2025-07">يوليو 2025</option>
+              {getMonthOptions().map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
             </select>
             <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
               <Activity className="w-4 h-4" />
@@ -212,6 +230,37 @@ export function Dashboard() {
           icon={CheckCircle}
           colorClass="text-blue-600 bg-blue-50/50"
         />
+
+        <StatCard
+          title="الغياب والتأخير"
+          value={
+            <div className="space-y-1">
+              <div className="text-orange-600">{data?.absences?.total || 0} سجل</div>
+              {(data?.absences?.finesTRY || 0) > 0 && (
+                <div className="text-xs font-normal text-red-500">₺{(data.absences!.finesTRY).toFixed(2)}</div>
+              )}
+              {(data?.absences?.finesUSD || 0) > 0 && (
+                <div className="text-xs font-normal text-red-500">${(data.absences!.finesUSD).toFixed(2)}</div>
+              )}
+            </div>
+          }
+          icon={Clock}
+          colorClass="text-orange-600 bg-orange-50/50"
+        />
+
+        <StatCard
+          title="الإجازات"
+          value={
+            <div className="space-y-1">
+              <div className="text-sky-600">{data?.leaves?.total || 0} إجازة</div>
+              {(data?.leaves?.pending || 0) > 0 && (
+                <div className="text-xs font-normal text-yellow-600">{data.leaves!.pending} في الانتظار</div>
+              )}
+            </div>
+          }
+          icon={Plane}
+          colorClass="text-sky-600 bg-sky-50/50"
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -219,12 +268,19 @@ export function Dashboard() {
         <div className="bg-card p-6 rounded-xl shadow-sm border border-border/50">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-bold text-foreground">الأنشطة الأخيرة</h2>
-            <button className="text-xs text-primary hover:underline font-medium">عرض الكل</button>
+            {data?.recent && data.recent.length > 5 && (
+              <button
+                className="text-xs text-primary hover:underline font-medium"
+                onClick={() => setShowAllActivities(!showAllActivities)}
+              >
+                {showAllActivities ? 'عرض أقل' : 'عرض الكل'}
+              </button>
+            )}
           </div>
 
           <div className="space-y-4">
             {data?.recent && data.recent.length > 0 ? (
-              data.recent.map((activity, index) => {
+              (showAllActivities ? data.recent : data.recent.slice(0, 5)).map((activity, index) => {
                 console.log('[Dashboard Frontend] Activity:', activity)
                 console.log('[Dashboard Frontend] Description:', activity.description || activity.message)
                 console.log('[Dashboard Frontend] Entity Type:', activity.entity_type || activity.kind)
@@ -294,7 +350,9 @@ export function Dashboard() {
               <p className="text-muted-foreground text-sm mb-5 max-w-[200px] leading-relaxed">
                 قم بإضافة سعر صرف جديد للبدء في حساب الرواتب
               </p>
-              <button className="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors shadow-sm">
+              <button
+                onClick={() => navigate('/exchange-rates')}
+                className="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors shadow-sm">
                 إضافة سعر صرف جديد
               </button>
             </div>

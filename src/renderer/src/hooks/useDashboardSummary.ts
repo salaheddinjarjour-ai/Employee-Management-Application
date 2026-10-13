@@ -16,6 +16,15 @@ export interface DashboardSummary {
     assigned: number
     percent: number
   }
+  absences?: {
+    total: number
+    finesTRY: number
+    finesUSD: number
+  }
+  leaves?: {
+    pending: number
+    total: number
+  }
   exchange: {
     rate: number
     effective_at: string

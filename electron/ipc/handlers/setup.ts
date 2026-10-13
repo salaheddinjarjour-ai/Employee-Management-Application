@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { getDatabase } from '../../database/init'
-import * as bcrypt from 'bcrypt'
+import * as bcrypt from 'bcryptjs'
 
 export const setupHandlers = {
     createFirstAdmin: async (event: any, { username, password }: any) => {

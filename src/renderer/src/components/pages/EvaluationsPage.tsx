@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react'
-import { Plus, Star, Users, TrendingUp, Calendar } from 'lucide-react'
+import { Plus, Star, Users, TrendingUp, Calendar, Search } from 'lucide-react'
 import { Button } from '../ui/Button'
 import ActionsBar from '../table/ActionsBar'
 import Modal from '../ui/Modal'
-import CreateEntityModal from '../form/CreateEntityModal'
-import { evaluationSchema } from '../../schemas/evaluation'
+import { EvaluationForm } from '../forms/EvaluationForm'
 import { formatISODate } from '../../utils/format'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
-import { OperationalPlansTab } from '../features/performance/OperationalPlansTab'
-import { KPIsTab } from '../features/performance/KPIsTab'
+import Confirm from '../ui/Confirm'
+
 
 interface Evaluation {
   id: number
   employee_id: number
   employee_name: string
+  employee_job_title?: string
+  employee_department?: string
   evaluator_id: number
   evaluator_name: string
   period: string
@@ -22,53 +22,8 @@ interface Evaluation {
   goals_percent: number
   status: string
   evaluation_date: string
+  notes?: string
 }
-
-const getEvaluationFields = () => [
-  {
-    type: 'employee-search' as const,
-    name: 'employee_id',
-    label: 'الموظف الرقم الوظيفي والاسم',
-    required: true,
-    placeholder: 'ابحث عن الموظف...'
-  },
-  {
-    type: 'employee-search' as const,
-    name: 'evaluator_id',
-    label: 'المقيم',
-    required: true,
-    placeholder: 'ابحث عن المقيم...'
-  },
-  { type: 'text' as const, name: 'period', label: 'الفترة', required: true, placeholder: '2025 - النصف الأول' },
-  { type: 'date' as const, name: 'evaluation_date', label: 'تاريخ التقييم', required: true },
-  { type: 'number' as const, name: 'overall_score', label: 'النتيجة (0-100)', required: true, placeholder: '85' },
-  {
-    type: 'select' as const,
-    name: 'rating',
-    label: 'التقييم',
-    required: true,
-    options: [
-      { label: 'ممتاز', value: 'ممتاز' },
-      { label: 'جيد', value: 'جيد' },
-      { label: 'مقبول', value: 'مقبول' },
-      { label: 'يحتاج تحسين', value: 'يحتاج تحسين' },
-      { label: 'ضعيف', value: 'ضعيف' }
-    ]
-  },
-  {
-    type: 'select' as const,
-    name: 'status',
-    label: 'الحالة',
-    required: true,
-    options: [
-      { label: 'قيد المراجعة', value: 'قيد المراجعة' },
-      { label: 'معتمد', value: 'معتمد' },
-      { label: 'مرفوض', value: 'مرفوض' }
-    ]
-  },
-  { type: 'number' as const, name: 'goals_percent', label: 'نسبة تحقيق الأهداف (%)', placeholder: '90' },
-  { type: 'textarea' as const, name: 'notes', label: 'ملاحظات', placeholder: 'اذكر الملاحظات والتوصيات...', rows: 3 },
-]
 
 export function EvaluationsPage() {
   const [evaluations, setEvaluations] = useState<Evaluation[]>([])
@@ -76,18 +31,21 @@ export function EvaluationsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingRow, setEditingRow] = useState<Evaluation | null>(null)
   const [viewRow, setViewRow] = useState<Evaluation | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [employees, setEmployees] = useState<any[]>([])
 
   const [stats, setStats] = useState<{ totals: any, dist: any[] }>({
     totals: { total: 0, avg_score: 0, approved_count: 0, excellent_count: 0 },
     dist: []
   })
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
 
   const refetch = async () => {
     setLoading(true)
     try {
       const [list, s] = await Promise.all([
-        window.electronAPI.invoke('evaluations:list'),
-        window.electronAPI.invoke('evaluations:stats')
+        window.electronAPI.listEvaluations(),
+        window.electronAPI.evaluationsStats()
       ])
       setEvaluations(list)
       setStats(s)
@@ -98,8 +56,24 @@ export function EvaluationsPage() {
     }
   }
 
+  const loadEmployees = async () => {
+    try {
+      const result = await (window.electronAPI as any).listEmployees?.()
+      if (Array.isArray(result)) setEmployees(result)
+    } catch (e) {
+      console.error('Failed to load employees:', e)
+    }
+  }
+
+  const filteredEvaluations = evaluations.filter(ev => {
+    if (!searchQuery) return true
+    return (ev.employee_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (ev.evaluator_name || '').toLowerCase().includes(searchQuery.toLowerCase())
+  })
+
   useEffect(() => {
     refetch()
+    loadEmployees()
     const sub = window.events?.on('evaluations:refresh', refetch)
     return () => { if (sub) sub() }
   }, [])
@@ -107,10 +81,13 @@ export function EvaluationsPage() {
   const getRatingColor = (rating: string) => {
     switch (rating) {
       case 'ممتاز': return 'bg-green-100 text-green-800'
-      case 'جيد': return 'bg-blue-100 text-blue-800'
+      case 'جيد جدًا': return 'bg-blue-100 text-blue-800'
+      case 'جيد': return 'bg-cyan-100 text-cyan-800'
+      case 'وسط': return 'bg-yellow-100 text-yellow-800'
+      case 'ضعيف': return 'bg-red-100 text-red-800'
+      // legacy values
       case 'مقبول': return 'bg-yellow-100 text-yellow-800'
       case 'يحتاج تحسين': return 'bg-orange-100 text-orange-800'
-      case 'ضعيف': return 'bg-red-100 text-red-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
@@ -139,20 +116,25 @@ export function EvaluationsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">تقييمات الأداء</h1>
-        <Button onClick={() => setShowCreateModal(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          إضافة تقييم جديد
-        </Button>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="البحث بالاسم..."
+              className="w-64 px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-right"
+            />
+            <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+          </div>
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            إضافة تقييم جديد
+          </Button>
+        </div>
       </div>
 
-      <Tabs defaultValue="evaluations" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 max-w-[600px] mb-6">
-          <TabsTrigger value="evaluations">تقييمات الأداء</TabsTrigger>
-          <TabsTrigger value="kpis">مؤشرات الأداء التنفيذي</TabsTrigger>
-          <TabsTrigger value="operational">الخطة التشغيلية</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="evaluations" className="space-y-6">
+      <div className="w-full space-y-6">
           {/* Statistics Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" dir="rtl">
             <div className="bg-white p-6 rounded-lg shadow-sm border">
@@ -206,18 +188,28 @@ export function EvaluationsPage() {
                 <thead className="bg-gray-50 border-b">
                   <tr>
                     <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">الموظف</th>
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">المسمى الوظيفي</th>
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">القسم/الوحدة</th>
                     <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">المقيم</th>
                     <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">الفترة</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">النتيجة</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">النتيجة الإجمالية</th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">التقييم</th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">الحالة</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">الإجراءات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {evaluations.map((ev) => (
+                  {filteredEvaluations.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-6 py-10 text-center text-gray-500">
+                        {searchQuery ? 'لا توجد نتائج للبحث' : 'لا توجد تقييمات'}
+                      </td>
+                    </tr>
+                  ) : filteredEvaluations.map((ev) => (
                     <tr key={ev.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{ev.employee_name}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{ev.employee_job_title || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{ev.employee_department || '-'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{ev.evaluator_name}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{ev.period}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold">{ev.overall_score}%</td>
@@ -239,15 +231,7 @@ export function EvaluationsPage() {
                           }}
                           onView={() => setViewRow(ev)}
                           onDelete={async () => {
-                            if (window.confirm('هل أنت متأكد من حذف هذا التقييم؟')) {
-                              try {
-                                await window.electronAPI.invoke('evaluations:delete', ev.id)
-                                window.toast?.success?.('تم الحذف بنجاح')
-                                refetch()
-                              } catch (e) {
-                                window.toast?.error?.('فشل الحذف')
-                              }
-                            }
+                            setConfirmDeleteId(ev.id)
                           }}
                         />
                       </td>
@@ -257,30 +241,21 @@ export function EvaluationsPage() {
               </table>
             </div>
           </div>
-        </TabsContent>
+      </div>
 
-        <TabsContent value="kpis">
-          <KPIsTab />
-        </TabsContent>
-
-        <TabsContent value="operational">
-          <OperationalPlansTab />
-        </TabsContent>
-      </Tabs>
-
-      <CreateEntityModal
+      <EvaluationForm
         open={showCreateModal}
         onClose={() => {
           setShowCreateModal(false)
           setEditingRow(null)
         }}
-        title={editingRow ? "تعديل تقييم" : "إضافة تقييم جديد"}
-        entity="evaluations"
-        schema={evaluationSchema}
-        fields={getEvaluationFields()}
-        defaults={editingRow || {}}
-        recordId={editingRow?.id}
-        onSuccess={refetch}
+        initial={editingRow}
+        employees={employees}
+        onSaved={() => {
+          setShowCreateModal(false)
+          setEditingRow(null)
+          refetch()
+        }}
       />
 
       {viewRow && (
@@ -316,13 +291,50 @@ export function EvaluationsPage() {
                   </span>
                 </p>
               </div>
+              <div>
+                <label className="text-xs text-gray-500">نسبة تحقيق الأهداف</label>
+                <p className="text-lg font-bold text-purple-600">{viewRow.goals_percent || 0}%</p>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">الحالة</label>
+                <p>
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(viewRow.status)}`}>
+                    {viewRow.status}
+                  </span>
+                </p>
+              </div>
             </div>
+            {(viewRow as any).notes && (
+              <div className="mt-4 p-3 bg-gray-50 rounded-lg border">
+                <label className="text-xs text-gray-500 block mb-1">ملاحظات</label>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">{(viewRow as any).notes}</p>
+              </div>
+            )}
             <div className="mt-6 flex justify-end">
               <Button onClick={() => setViewRow(null)}>إغلاق</Button>
             </div>
           </div>
         </Modal>
       )}
+      <Confirm
+        open={confirmDeleteId !== null}
+        onClose={() => setConfirmDeleteId(null)}
+        onConfirm={async () => {
+          if (confirmDeleteId === null) return
+          try {
+            await window.electronAPI.deleteEvaluation(confirmDeleteId)
+            window.toast?.success?.('تم الحذف بنجاح')
+            refetch()
+          } catch (e) {
+            window.toast?.error?.('فشل الحذف')
+          } finally {
+            setConfirmDeleteId(null)
+          }
+        }}
+        title="تأكيد حذف التقييم"
+        message="هل أنت متأكد من حذف هذا التقييم؟ لا يمكن التراجع عن هذا الإجراء."
+        confirmText="حذف نهائي"
+      />
     </div>
   )
 }

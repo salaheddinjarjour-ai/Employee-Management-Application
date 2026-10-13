@@ -109,10 +109,7 @@ export default function PayrollPage() {
     }
 
     try {
-      await window.electronAPI.payrollDelete({
-        employee_id: payroll.header.employee_id,
-        period: payroll.header.period
-      })
+      await window.electronAPI.payrollDelete(payroll.header.id)
       toast.success('تم حذف الراتب بنجاح')
       loadPayrollsByPeriod()
     } catch (error) {
@@ -139,50 +136,60 @@ export default function PayrollPage() {
   }
 
   const formatMoney = (amount: number, currency: string) => {
-    return `${amount.toFixed(2)} ${currency}`
+    return `${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
   }
 
   const calculateTotals = (payroll: PayrollRecord) => {
-    const totals = { TRY: 0, USD: 0 }
+    const result = { grossTRY: 0, grossUSD: 0, dedTRY: 0, dedUSD: 0, netTRY: 0, netUSD: 0 }
 
     // Safety check for header
     if (!payroll?.header) {
-      return totals
+      return result
     }
 
     // Add base amount (with fallback to TRY for older records)
     const baseCurrency = payroll.header.base_min_currency || 'TRY'
     const baseAmount = payroll.header.base_min || 0
     if (baseCurrency === 'TRY') {
-      totals.TRY += baseAmount
+      result.grossTRY += baseAmount
     } else {
-      totals.USD += baseAmount
+      result.grossUSD += baseAmount
     }
 
     // Add experience allowance (with fallbacks for older records)
     const expAmount = (payroll.header.experience_allowance_amount || 0) * (payroll.header.years_of_exp || 0)
     const expCurrency = payroll.header.experience_allowance_currency || 'TRY'
     if (expCurrency === 'TRY') {
-      totals.TRY += expAmount
+      result.grossTRY += expAmount
     } else {
-      totals.USD += expAmount
+      result.grossUSD += expAmount
     }
 
     // Add lines (with safety check)
     if (payroll.lines && Array.isArray(payroll.lines)) {
       payroll.lines.forEach(line => {
+        const amount = line.amount || 0
         if (line.category === 'allowance' || line.category === 'exception') {
-          const amount = line.amount || 0
           if (line.currency === 'TRY') {
-            totals.TRY += amount
+            result.grossTRY += amount
           } else {
-            totals.USD += amount
+            result.grossUSD += amount
+          }
+        } else if (line.category === 'deduction') {
+          if (line.currency === 'TRY') {
+            result.dedTRY += amount
+          } else {
+            result.dedUSD += amount
           }
         }
       })
     }
 
-    return totals
+    // Net = Gross - Deductions
+    result.netTRY = result.grossTRY - result.dedTRY
+    result.netUSD = result.grossUSD - result.dedUSD
+
+    return result
   }
 
   const filteredPayrolls = payrolls
@@ -202,13 +209,15 @@ export default function PayrollPage() {
   // Calculate totals for the current period
   const periodTotals = useMemo(() => {
     return filteredPayrolls.reduce(
-      (acc: { try: number; usd: number }, payroll: PayrollRecord) => {
+      (acc: { grossTry: number; grossUsd: number; netTry: number; netUsd: number }, payroll: PayrollRecord) => {
         const totals = calculateTotals(payroll)
-        acc.try += totals.TRY || 0
-        acc.usd += totals.USD || 0
+        acc.grossTry += totals.grossTRY || 0
+        acc.grossUsd += totals.grossUSD || 0
+        acc.netTry += totals.netTRY || 0
+        acc.netUsd += totals.netUSD || 0
         return acc
       },
-      { try: 0, usd: 0 }
+      { grossTry: 0, grossUsd: 0, netTry: 0, netUsd: 0 }
     )
   }, [filteredPayrolls])
 
@@ -287,12 +296,12 @@ export default function PayrollPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm text-gray-500">إجمالي المدفوع بالليرة التركية</div>
-                <div className="mt-1 text-2xl font-semibold">TRY {periodTotals.try.toLocaleString('ar-SA')}</div>
+                <div className="text-sm text-gray-500">إجمالي الرواتب TRY</div>
+                <div className="mt-1 text-2xl font-semibold">₺ {periodTotals.grossTry.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
               </div>
               <div className="h-10 w-10 rounded-full bg-emerald-50 flex items-center justify-center">
                 <span className="text-emerald-600">₺</span>
@@ -303,11 +312,35 @@ export default function PayrollPage() {
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm text-gray-500">إجمالي المدفوع بالدولار</div>
-                <div className="mt-1 text-2xl font-semibold">USD {periodTotals.usd.toLocaleString('en-US')}</div>
+                <div className="text-sm text-gray-500">صافي الرواتب TRY</div>
+                <div className="mt-1 text-2xl font-semibold text-green-700">₺ {periodTotals.netTry.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-green-50 flex items-center justify-center">
+                <span className="text-green-600">₺</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm text-gray-500">إجمالي الرواتب USD</div>
+                <div className="mt-1 text-2xl font-semibold">$ {periodTotals.grossUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
               </div>
               <div className="h-10 w-10 rounded-full bg-sky-50 flex items-center justify-center">
                 <span className="text-sky-600">$</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm text-gray-500">صافي الرواتب USD</div>
+                <div className="mt-1 text-2xl font-semibold text-green-700">$ {periodTotals.netUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-green-50 flex items-center justify-center">
+                <span className="text-green-600">$</span>
               </div>
             </div>
           </div>
@@ -362,6 +395,12 @@ export default function PayrollPage() {
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       إجمالي USD
                     </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-green-600 uppercase tracking-wider">
+                      صافي TRY
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-green-600 uppercase tracking-wider">
+                      صافي USD
+                    </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       آخر تحديث
                     </th>
@@ -397,10 +436,16 @@ export default function PayrollPage() {
                           {header.years_of_exp || 0} {arabicYearsLabel(Number(header.years_of_exp || 0))}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatMoney(totals.TRY, 'TRY')}
+                          {formatMoney(totals.grossTRY, 'TRY')}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatMoney(totals.USD, 'USD')}
+                          {formatMoney(totals.grossUSD, 'USD')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-700">
+                          {formatMoney(totals.netTRY, 'TRY')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-700">
+                          {formatMoney(totals.netUSD, 'USD')}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {formatGregorian(header.updated_at)}

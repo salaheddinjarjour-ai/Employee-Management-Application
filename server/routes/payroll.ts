@@ -3,7 +3,7 @@ import express from 'express';
 import repos from '../db/repositories';
 import { computeTotals } from '../payroll/calc';
 import { normalizePeriod } from '../utils/period';
-import { queryOne } from '../db/mssql-connection';
+import { queryOne } from '../db/connection';
 
 const router = express.Router();
 

@@ -43,7 +43,8 @@ export const useAuthStore = create<AuthState>()(
                     if (result.success && result.user) {
                         set({
                             user: result.user,
-                            isAuthenticated: true
+                            isAuthenticated: true,
+                            isLoading: false
                         })
 
                         // Load permissions after login
@@ -51,6 +52,7 @@ export const useAuthStore = create<AuthState>()(
 
                         return { success: true }
                     } else {
+                        set({ isLoading: false })
                         return {
                             success: false,
                             error: result.error || 'فشل تسجيل الدخول'
@@ -58,6 +60,7 @@ export const useAuthStore = create<AuthState>()(
                     }
                 } catch (error: any) {
                     console.error('Login error:', error)
+                    set({ isLoading: false })
                     return {
                         success: false,
                         error: 'حدث خطأ أثناء تسجيل الدخول'

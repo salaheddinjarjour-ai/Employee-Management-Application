@@ -1,4 +1,4 @@
-import { query, queryOne, getConnection, sql } from '../mssql-connection'
+import { query, queryOne, getConnection } from '../connection'
 
 export default {
   async upsertHeader(h: any) {
@@ -11,9 +11,15 @@ export default {
       experience_allowance_currency: h.experience_allowance_currency || 'TRY'
     }
 
-    const sqlQuery = `
-      IF EXISTS (SELECT 1 FROM payroll_headers WHERE employee_id = @employee_id AND period = @period)
-      BEGIN
+    // Check if header exists
+    const existing = await queryOne(
+      'SELECT id FROM payroll_headers WHERE employee_id = @employee_id AND period = @period',
+      { employee_id: params.employee_id, period: params.period }
+    )
+
+    if (existing) {
+      // Update existing header
+      await query(`
         UPDATE payroll_headers SET
           id_number = @id_number,
           start_date = @start_date,
@@ -27,13 +33,15 @@ export default {
           experience_allowance_amount = @experience_allowance_amount,
           experience_allowance_currency = @experience_allowance_currency,
           notes = @notes,
-          updated_at = GETDATE()
-        WHERE employee_id = @employee_id AND period = @period;
-        
-        SELECT id FROM payroll_headers WHERE employee_id = @employee_id AND period = @period;
-      END
-      ELSE
-      BEGIN
+          updated_at = CURRENT_TIMESTAMP
+        WHERE employee_id = @employee_id AND period = @period
+      `, params)
+
+      console.log(`[payrollRepo] Header updated with ID: ${existing.id}`)
+      return existing.id
+    } else {
+      // Insert new header
+      const insertSql = `
         INSERT INTO payroll_headers (
           employee_id, period, id_number, start_date, admin_level, job_title,
           edu_actual, edu_required, base_min, base_min_currency, years_of_exp,
@@ -41,55 +49,39 @@ export default {
         ) VALUES (
           @employee_id, @period, @id_number, @start_date, @admin_level, @job_title,
           @edu_actual, @edu_required, @base_min, @base_min_currency, @years_of_exp,
-          @experience_allowance_amount, @experience_allowance_currency, @notes, GETDATE()
-        );
-        
-        SELECT SCOPE_IDENTITY() AS id;
-      END
-    `
-
-    const result = await query(sqlQuery, params)
-    const id = result.recordset[0].id
-    console.log(`[payrollRepo] Header upserted with ID: ${id}`)
-    return id
+          @experience_allowance_amount, @experience_allowance_currency, @notes, CURRENT_TIMESTAMP
+        )
+      `
+      const result = await query(insertSql, params)
+      const id = result.recordset[0].id
+      console.log(`[payrollRepo] Header inserted with ID: ${id}`)
+      return id
+    }
   },
 
   async replaceLines(header_id: number, lines: any[]) {
     console.log(`[payrollRepo] Replacing lines for header ${header_id}:`, lines)
 
-    const pool = await getConnection()
-    const transaction = new sql.Transaction(pool)
+    // Delete existing lines
+    await query('DELETE FROM payroll_lines WHERE header_id = @header_id', { header_id })
 
-    try {
-      await transaction.begin()
-
-      const request = new sql.Request(transaction)
-      request.input('header_id', header_id)
-      await request.query('DELETE FROM payroll_lines WHERE header_id = @header_id')
-
-      for (let i = 0; i < lines.length; i++) {
-        const l = lines[i]
-        const insertReq = new sql.Request(transaction)
-        insertReq.input('header_id', header_id)
-        insertReq.input('category', l.category)
-        insertReq.input('label', l.label)
-        insertReq.input('currency', l.currency)
-        insertReq.input('amount', l.amount)
-        insertReq.input('sort_order', i)
-
-        await insertReq.query(`
-          INSERT INTO payroll_lines (header_id, category, label, currency, amount, sort_order)
-          VALUES (@header_id, @category, @label, @currency, @amount, @sort_order)
-        `)
-      }
-
-      await transaction.commit()
-      console.log(`[payrollRepo] Replaced ${lines.length} lines for header ${header_id}`)
-    } catch (err) {
-      console.error('[payrollRepo] Transaction failed:', err)
-      await transaction.rollback()
-      throw err
+    // Insert new lines one by one
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i]
+      await query(`
+        INSERT INTO payroll_lines (header_id, line_key, label, currency, amount, sort_order)
+        VALUES (@header_id, @line_key, @label, @currency, @amount, @sort_order)
+      `, {
+        header_id,
+        line_key: l.category || l.line_key || '',
+        label: l.label,
+        currency: l.currency,
+        amount: l.amount,
+        sort_order: i
+      })
     }
+
+    console.log(`[payrollRepo] Replaced ${lines.length} lines for header ${header_id}`)
   },
 
   async getFull(headerQuery: { employee_id: number; period: string }) {
@@ -238,7 +230,7 @@ export default {
     // For each header, calculate totals from lines
     const payrolls = await Promise.all(headers.map(async (header: any) => {
       const linesSql = `
-        SELECT category, label, currency, amount 
+        SELECT line_key AS category, label, currency, amount 
         FROM payroll_lines 
         WHERE header_id = @header_id
         ORDER BY sort_order ASC
@@ -356,7 +348,7 @@ export default {
 
     await Promise.all(headers.map(async (header: any) => {
       const linesSql = `
-        SELECT category, currency, amount 
+        SELECT line_key AS category, currency, amount 
         FROM payroll_lines 
         WHERE header_id = @header_id
       `

@@ -14,6 +14,8 @@ interface Course {
   course_name: string
   employee_name: string
   provider: string
+  trainer_name?: string
+  training_org?: string
   start_date: string
   end_date: string
   result: string
@@ -49,9 +51,10 @@ const getCourseFields = (employees: any[]) => [
     label: 'الحالة',
     required: true,
     options: [
-      { label: 'مخطط', value: 'planned' },
-      { label: 'جاري', value: 'ongoing' },
-      { label: 'مكتمل', value: 'completed' }
+      { label: 'مخطط', value: 'مخطط' },
+      { label: 'جاري', value: 'جاري' },
+      { label: 'مكتمل', value: 'مكتمل' },
+      { label: 'ملغي', value: 'ملغي' }
     ],
     placeholder: 'اختر الحالة'
   },
@@ -89,7 +92,10 @@ export function CoursesPage() {
   const loadCourses = async () => {
     setLoading(true)
     try {
-      if (window.api?.listRecords) {
+      if (window.api?.listCourses) {
+        const data = await window.api.listCourses()
+        setCourses(data)
+      } else if (window.api?.listRecords) {
         const data = await window.api.listRecords('courses')
         setCourses(data)
       }
@@ -322,6 +328,12 @@ export function CoursesPage() {
                   الجهة المنفذة
                 </th>
                 <th className="px-6 py-3 text-right text-sm font-bold text-gray-900">
+                  جهة التدريب
+                </th>
+                <th className="px-6 py-3 text-right text-sm font-bold text-gray-900">
+                  اسم المدرّب
+                </th>
+                <th className="px-6 py-3 text-right text-sm font-bold text-gray-900">
                   تاريخ الدورة
                 </th>
                 <th className="px-6 py-3 text-right text-sm font-bold text-gray-900">
@@ -349,6 +361,12 @@ export function CoursesPage() {
                   </td>
                   <td className="px-6 py-4 text-right text-sm text-gray-900">
                     {course.provider}
+                  </td>
+                  <td className="px-6 py-4 text-right text-sm text-gray-900">
+                    {course.training_org || '-'}
+                  </td>
+                  <td className="px-6 py-4 text-right text-sm text-gray-900">
+                    {course.trainer_name || '-'}
                   </td>
                   <td className="px-6 py-4 text-right text-sm text-gray-900">
                     {course.start_date} → {course.end_date}

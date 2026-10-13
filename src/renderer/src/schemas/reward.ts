@@ -10,17 +10,14 @@ export const rewardInputSchema = z.object({
   employee_id: z.preprocess((v) => Number(v), z.number().min(1, 'اختر الموظف')),
   title: z.string().min(2, 'اكتب عنواناً مناسباً'),
   description: z.string().optional(),
+  notes: z.string().optional(),
   kind: z.enum(['مكافأة', 'تقدير', 'إنجاز', 'ابتكار', 'خاص'], {
     errorMap: () => ({ message: 'اختر نوع المكافأة' })
   }),
-  category: z.enum(['شهري', 'سنوي', 'ربع سنوي', 'خاص'], {
-    errorMap: () => ({ message: 'اختر فئة المكافأة' })
-  }),
-  amount_usd: toNum(), // اختياري
+  amount_usd: toNum(), // قيمة المكافأة (اختياري)
+  reward_currency: z.string().optional(), // USD or TRY
   reward_date: z.string().min(4, 'اختر التاريخ'),
-  status: z.enum(['مدفوع', 'في الانتظار', 'معتمد'], {
-    errorMap: () => ({ message: 'اختر حالة المكافأة' })
-  }),
+  status: z.string().min(1, 'اختر الحالة'),
 })
 
 export type RewardInput = z.infer<typeof rewardInputSchema>

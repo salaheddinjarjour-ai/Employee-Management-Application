@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '../ui/Button'
 import { X, Upload, Paperclip, Trash2 } from 'lucide-react'
+import { EmployeeSearchSelect } from './EmployeeSearchSelect'
 
 interface CourseFormProps {
   isOpen: boolean
@@ -17,11 +18,13 @@ export function CourseForm({ isOpen, onClose, onSave, initialData, employees }: 
     employee_id: initialData?.employee_id ?? '',
     course_name: initialData?.course_name ?? '',
     provider: initialData?.provider ?? '',
+    trainer_name: initialData?.trainer_name ?? '',
+    training_org: initialData?.training_org ?? '',
     start_date: initialData?.start_date ?? '',
     end_date: initialData?.end_date ?? '',
     result: initialData?.result ?? '',
     grade: initialData?.grade ?? '',
-    status: initialData?.status ?? 'planned',
+    status: initialData?.status ?? 'مخطط',
     attachment_name: initialData?.attachment_name ?? '',
     attachment_path: initialData?.attachment_path ?? '',
     attachment_size: initialData?.attachment_size ?? 0,
@@ -33,11 +36,13 @@ export function CourseForm({ isOpen, onClose, onSave, initialData, employees }: 
         employee_id: initialData.employee_id ?? '',
         course_name: initialData.course_name ?? '',
         provider: initialData.provider ?? '',
+        trainer_name: initialData.trainer_name ?? '',
+        training_org: initialData.training_org ?? '',
         start_date: initialData.start_date ?? '',
         end_date: initialData.end_date ?? '',
         result: initialData.result ?? '',
         grade: initialData.grade ?? '',
-        status: initialData.status ?? 'planned',
+        status: initialData.status ?? 'مخطط',
         attachment_name: initialData.attachment_name ?? '',
         attachment_path: initialData.attachment_path ?? '',
         attachment_size: initialData.attachment_size ?? 0,
@@ -156,22 +161,10 @@ export function CourseForm({ isOpen, onClose, onSave, initialData, employees }: 
           <div className="grid grid-cols-2 gap-6">
             {/* Employee Selection */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                اسم الموظف *
-              </label>
-              <select
-                value={form.employee_id}
-                onChange={(e) => setForm(prev => ({ ...prev, employee_id: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              >
-                <option value="">اختر الموظف</option>
-                {employees.map(emp => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.employee_no} - {emp.full_name}
-                  </option>
-                ))}
-              </select>
+              <EmployeeSearchSelect
+                selectedId={form.employee_id ? Number(form.employee_id) : null}
+                onSelect={(emp) => setForm(prev => ({ ...prev, employee_id: emp?.id ?? '' }))}
+              />
             </div>
 
             {/* Course Name */}
@@ -190,7 +183,7 @@ export function CourseForm({ isOpen, onClose, onSave, initialData, employees }: 
             </div>
 
             {/* Provider */}
-            <div className="col-span-2">
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 الجهة المنفذة *
               </label>
@@ -201,6 +194,34 @@ export function CourseForm({ isOpen, onClose, onSave, initialData, employees }: 
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="مثال: معهد التقنية"
                 required
+              />
+            </div>
+
+            {/* Training Org */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                جهة التدريب
+              </label>
+              <input
+                type="text"
+                value={form.training_org}
+                onChange={(e) => setForm(prev => ({ ...prev, training_org: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="مثال: وزارة العمل"
+              />
+            </div>
+
+            {/* Trainer Name */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                اسم المدرّب
+              </label>
+              <input
+                type="text"
+                value={form.trainer_name}
+                onChange={(e) => setForm(prev => ({ ...prev, trainer_name: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="اسم المدرب أو المحاضر"
               />
             </div>
 
@@ -278,10 +299,10 @@ export function CourseForm({ isOpen, onClose, onSave, initialData, employees }: 
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               >
-                <option value="planned">مخطط</option>
-                <option value="ongoing">جاري</option>
-                <option value="completed">مكتمل</option>
-                <option value="cancelled">ملغي</option>
+                <option value="مخطط">مخطط</option>
+                <option value="جاري">جاري</option>
+                <option value="مكتمل">مكتمل</option>
+                <option value="ملغي">ملغي</option>
               </select>
             </div>
           </div>

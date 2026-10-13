@@ -47,6 +47,7 @@ const electronAPI = {
     getEmployeeProfile: (id: number) => ipcRenderer.invoke('employees:profile', id),
     createEmployee: (data: any) => ipcRenderer.invoke('employees:create', data),
     searchEmployees: (query: string) => ipcRenderer.invoke('employees:search', query),
+    exportEmployees: (filters?: any) => ipcRenderer.invoke('employees:export', filters),
     employees: {
         getAll: () => ipcRenderer.invoke('employees:list'),
         getSalaryDefaults: (id: number) => ipcRenderer.invoke('employees:salary-defaults', id),
@@ -98,6 +99,9 @@ const electronAPI = {
     // Absences
     createAbsence: (data: any) => ipcRenderer.invoke('absences:create', data),
     listAbsences: () => ipcRenderer.invoke('records:list', 'absences'),
+    listAbsenceTypes: () => ipcRenderer.invoke('absences:list-types'),
+    createAbsenceType: (data: any) => ipcRenderer.invoke('absences:create-type', data),
+    deleteAbsenceType: (id: number) => ipcRenderer.invoke('absences:delete-type', id),
 
     // Courses
     createCourse: (data: any) => ipcRenderer.invoke('courses:create', data),
@@ -108,10 +112,16 @@ const electronAPI = {
     // Evaluations
     createEvaluation: (data: any) => ipcRenderer.invoke('evaluations:create', data),
     listEvaluations: () => ipcRenderer.invoke('evaluations:list'),
+    updateEvaluation: (id: number, data: any) => ipcRenderer.invoke('evaluations:update', id, data),
+    deleteEvaluation: (id: number) => ipcRenderer.invoke('evaluations:delete', id),
+    evaluationsStats: () => ipcRenderer.invoke('evaluations:stats'),
 
     // Promotions
     createPromotion: (data: any) => ipcRenderer.invoke('promotions:create', data),
-    listPromotions: () => ipcRenderer.invoke('promotions:list'),
+    listPromotions: (typeFilter?: string) => ipcRenderer.invoke('promotions:list', typeFilter),
+    updatePromotion: (id: number, data: any) => ipcRenderer.invoke('promotions:update', id, data),
+    deletePromotion: (id: number) => ipcRenderer.invoke('promotions:delete', id),
+    promotionsStats: () => ipcRenderer.invoke('promotions:stats'),
 
     // Rewards
     createReward: (data: any) => ipcRenderer.invoke('records:create', 'rewards', data),
@@ -119,6 +129,13 @@ const electronAPI = {
     updateReward: (id: number, data: any) => ipcRenderer.invoke('records:update', 'rewards', id, data),
     deleteReward: (id: number) => ipcRenderer.invoke('records:delete', 'rewards', id),
     rewardsStats: () => ipcRenderer.invoke('records:stats', 'rewards'),
+    listRewardTypes: () => ipcRenderer.invoke('rewards:list-types'),
+    createRewardType: (data: any) => ipcRenderer.invoke('rewards:create-type', data),
+    deleteRewardType: (id: number) => ipcRenderer.invoke('rewards:delete-type', id),
+    listRewardStatuses: () => ipcRenderer.invoke('rewards:list-statuses'),
+    createRewardStatus: (data: any) => ipcRenderer.invoke('rewards:create-status', data),
+    deleteRewardStatus: (id: number) => ipcRenderer.invoke('rewards:delete-status', id),
+    rewardSyncToPayroll: (id: number) => ipcRenderer.invoke('rewards:sync-to-payroll', id),
 
     // Excel
     excelPreview: (file: any) => ipcRenderer.invoke('excel:preview', file.path || file),

@@ -1,6 +1,7 @@
 
 import express from 'express';
 import repos from '../db/repositories';
+import { employeePivotRepo, PivotRole } from '../db/repositories/employeePivotRepo';
 
 const router = express.Router();
 
@@ -26,6 +27,8 @@ router.get('/:entity', asyncHandler(async (req: any, res: any) => {
         case 'leaves': result = await repos.leaves.list(); break;
         case 'absences': result = await repos.absences.findAll(filters); break;
         case 'departments': result = await repos.departments.findAll(filters); break;
+        case 'units': result = await repos.units.findAll(filters); break;
+        case 'committees': result = await repos.committees.findAll(filters); break;
         case 'sections': result = await repos.sections.findAll(filters); break;
         case 'locations': result = await repos.locations.findAll(filters); break;
         case 'holidays': result = await repos.holidays.findAll(filters); break;
@@ -91,6 +94,8 @@ router.get('/:entity/:id', asyncHandler(async (req: any, res: any) => {
         case 'leaves': result = await repos.leaves.findById(numericId); break;
         case 'absences': result = await repos.absences.findById(numericId); break;
         case 'departments': result = await repos.departments.findById(numericId); break;
+        case 'units': result = await repos.units.findById(numericId); break;
+        case 'committees': result = await repos.committees.findById(numericId); break;
         case 'sections': result = await repos.sections.findById(numericId); break;
         case 'locations': result = await repos.locations.findById(numericId); break;
         case 'holidays': result = await repos.holidays.findById(numericId); break;
@@ -105,6 +110,11 @@ router.get('/:entity/:id', asyncHandler(async (req: any, res: any) => {
     }
 
     if (!result) return res.status(404).json({ error: 'Not found' });
+
+    // Ensure any standard array properties are strictly arrays, not nulls
+    if (result.roles === null) result.roles = [];
+    if (result.attachments === null) result.attachments = [];
+
     res.json(result);
 }));
 
@@ -118,7 +128,41 @@ router.post('/:entity', asyncHandler(async (req: any, res: any) => {
     let id: number | string = 0;
 
     switch (entity) {
-        case 'employees': id = await repos.employees.create(payload); break;
+        case 'employees': {
+            const errors: { field: string, message: string }[] = [];
+            if (!('job_title' in payload)) errors.push({ field: "job_title", message: "المسمى الوظيفي مطلوب في البيانات المرسلة" });
+            if (!payload.department) errors.push({ field: "department", message: "القسم مطلوب في البيانات المرسلة" });
+            if (!payload.employee_no) errors.push({ field: "employee_no", message: "رقم الموظف مطلوب" });
+
+            if (payload.email) {
+                const existingEmail = await repos.employees.findByEmail(payload.email.trim().toLowerCase());
+                if (existingEmail) errors.push({ field: "email", message: "البريد الإلكتروني مستخدم مسبقاً" });
+            }
+            if (payload.employee_no) {
+                const existingNo = await repos.employees.findByEmployeeNo(payload.employee_no.trim());
+                if (existingNo) errors.push({ field: "employee_no", message: "رقم الموظف مستخدم مسبقاً" });
+            }
+
+            if (errors.length > 0) return res.status(400).json({ errors });
+
+            const { query } = await import('../db/connection');
+
+            try {
+                await query('BEGIN TRANSACTION');
+                id = await repos.employees.create(payload);
+                if (payload.roles && Array.isArray(payload.roles)) {
+                    await employeePivotRepo.syncDepartments(id as number, payload.roles.filter((r: any) => r.role_type === 'department' && r.entity_id != null));
+                    await employeePivotRepo.syncUnits(id as number, payload.roles.filter((r: any) => r.role_type === 'unit' && r.entity_id != null));
+                    await employeePivotRepo.syncCommittees(id as number, payload.roles.filter((r: any) => r.role_type === 'committee' && r.entity_id != null));
+                }
+                await query('COMMIT');
+            } catch (err: any) {
+                try { await query('ROLLBACK'); } catch (e) { }
+                console.error('[API] Transaction mapped to 400:', err);
+                return res.status(400).json({ errors: [{ field: "system", message: "حدث خطأ أثناء حفظ البيانات. يرجى مراجعة المدخلات" }] });
+            }
+            break;
+        }
         case 'courses': id = await repos.courses.create(payload); break;
         case 'evaluations':
             const e = await repos.evaluations.create(payload) as any; id = e?.id; break;
@@ -130,6 +174,8 @@ router.post('/:entity', asyncHandler(async (req: any, res: any) => {
             const l = await repos.leaves.create(payload) as any; id = l?.id; break;
         case 'absences': id = await repos.absences.create(payload); break;
         case 'departments': id = await repos.departments.create(payload); break;
+        case 'units': id = await repos.units.create(payload); break;
+        case 'committees': id = await repos.committees.create(payload); break;
         case 'sections': id = await repos.sections.create(payload); break;
         case 'locations': id = await repos.locations.create(payload); break;
         case 'holidays': id = await repos.holidays.create(payload); break;
@@ -161,7 +207,43 @@ router.put('/:entity/:id', asyncHandler(async (req: any, res: any) => {
     let changes = 0;
 
     switch (entity) {
-        case 'employees': if (await repos.employees.update(numericId, payload)) changes = 1; break;
+        case 'employees': {
+            const errors: { field: string, message: string }[] = [];
+            if (!('job_title' in payload)) errors.push({ field: "job_title", message: "المسمى الوظيفي مطلوب في البيانات المرسلة" });
+            if (!payload.department) errors.push({ field: "department", message: "القسم مطلوب في البيانات المرسلة" });
+            if (!payload.employee_no) errors.push({ field: "employee_no", message: "رقم الموظف مطلوب" });
+
+            if (payload.email) {
+                const existingEmail = await repos.employees.findByEmail(payload.email.trim().toLowerCase());
+                if (existingEmail && existingEmail.id !== numericId) errors.push({ field: "email", message: "البريد الإلكتروني مستخدم مسبقاً" });
+            }
+            if (payload.employee_no) {
+                const existingNo = await repos.employees.findByEmployeeNo(payload.employee_no.trim());
+                if (existingNo && existingNo.id !== numericId) errors.push({ field: "employee_no", message: "رقم الموظف مستخدم مسبقاً" });
+            }
+
+            if (errors.length > 0) return res.status(400).json({ errors });
+
+            const { query } = await import('../db/connection');
+
+            try {
+                await query('BEGIN TRANSACTION');
+                if (await repos.employees.update(numericId, payload)) {
+                    changes = 1;
+                    if (payload.roles && Array.isArray(payload.roles)) {
+                        await employeePivotRepo.syncDepartments(numericId, payload.roles.filter((r: any) => r.role_type === 'department' && r.entity_id != null));
+                        await employeePivotRepo.syncUnits(numericId, payload.roles.filter((r: any) => r.role_type === 'unit' && r.entity_id != null));
+                        await employeePivotRepo.syncCommittees(numericId, payload.roles.filter((r: any) => r.role_type === 'committee' && r.entity_id != null));
+                    }
+                }
+                await query('COMMIT');
+            } catch (err: any) {
+                try { await query('ROLLBACK'); } catch (e) { }
+                console.error('[API] Transaction mapped to 400:', err);
+                return res.status(400).json({ errors: [{ field: "system", message: "حدث خطأ أثناء حفظ البيانات. يرجى مراجعة المدخلات" }] });
+            }
+            break;
+        }
         case 'courses': changes = await repos.courses.update(numericId, payload); break;
         case 'evaluations': if (await repos.evaluations.update(numericId, payload)) changes = 1; break;
         case 'promotions': if (await repos.promotions.update(numericId, payload)) changes = 1; break;
@@ -169,6 +251,8 @@ router.put('/:entity/:id', asyncHandler(async (req: any, res: any) => {
         case 'leaves': if (await repos.leaves.update(numericId, payload)) changes = 1; break;
         case 'absences': changes = await repos.absences.update(numericId, payload); break;
         case 'departments': changes = await repos.departments.update(numericId, payload); break;
+        case 'units': changes = await repos.units.update(numericId, payload); break;
+        case 'committees': changes = await repos.committees.update(numericId, payload); break;
         case 'sections': changes = await repos.sections.update(numericId, payload); break;
         case 'locations': changes = await repos.locations.update(numericId, payload); break;
         case 'holidays': changes = await repos.holidays.update(numericId, payload); break;
@@ -206,6 +290,8 @@ router.delete('/:entity/:id', asyncHandler(async (req: any, res: any) => {
             const l = await repos.leaves.remove(numericId); changes = (l as any).changes ?? l; break;
         case 'absences': changes = await repos.absences.remove(numericId); break;
         case 'departments': changes = await repos.departments.remove(numericId); break;
+        case 'units': changes = await repos.units.remove(numericId); break;
+        case 'committees': changes = await repos.committees.remove(numericId); break;
         case 'sections': changes = await repos.sections.remove(numericId); break;
         case 'locations': changes = await repos.locations.remove(numericId); break;
         case 'holidays': changes = await repos.holidays.remove(numericId); break;

@@ -1,4 +1,4 @@
-import { query, queryOne } from '../mssql-connection'
+import { query, queryOne } from '../connection'
 
 export default {
     async findAll(filters?: any) {
@@ -8,9 +8,9 @@ export default {
         e.id as id,
         e.full_name as employee_name,
         e.hire_date,
-        DATEDIFF(YEAR, TRY_CAST(e.hire_date AS DATE), GETDATE()) as years_of_service,
-        DATEDIFF(MONTH, TRY_CAST(e.hire_date AS DATE), GETDATE()) % 12 as months_of_service,
-        DATEDIFF(DAY, TRY_CAST(e.hire_date AS DATE), GETDATE()) as total_days
+        CAST((julianday('now') - julianday(e.hire_date)) / 365.25 AS INTEGER) as years_of_service,
+        CAST(((julianday('now') - julianday(e.hire_date)) / 30.44) AS INTEGER) % 12 as months_of_service,
+        CAST(julianday('now') - julianday(e.hire_date) AS INTEGER) as total_days
       FROM employees e
       WHERE e.status = 'active'
       ORDER BY e.hire_date ASC

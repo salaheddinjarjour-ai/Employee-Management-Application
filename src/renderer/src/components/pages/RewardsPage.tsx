@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Button } from '../ui/Button'
-import { Plus, Edit, Eye, Gift, Star, Trophy, DollarSign, Trash2, X, Award, Target, Lightbulb, Heart } from 'lucide-react'
+import { Plus, Edit, Eye, Gift, Star, Trophy, DollarSign, Trash2, X, Award, Target, Lightbulb, Heart, Settings, RefreshCw } from 'lucide-react'
 import { formatCurrency } from '@/utils/currency'
 import { useAppStore } from '@/store/appStore'
 import { RewardForm } from '../forms/RewardForm'
@@ -13,11 +13,15 @@ interface Reward {
   employee_name: string
   title: string
   description?: string
+  notes?: string
   kind: 'مكافأة' | 'تقدير' | 'إنجاز' | 'ابتكار' | 'خاص'
-  category: 'شهري' | 'سنوي' | 'ربع سنوي' | 'خاص'
   amount_usd?: number
+  reward_currency?: string
   reward_date: string
-  status: 'مدفوع' | 'في الانتظار' | 'معتمد'
+  status: string
+  payroll_action?: string
+  payroll_month?: string
+  payroll_synced?: number
   created_at: string
   updated_at: string
 }
@@ -67,12 +71,38 @@ export function RewardsPage() {
   // Filter state
   const [kindFilter, setKindFilter] = useState<string | undefined>(undefined)
 
+  // Manage types state
+  const [manageTypesOpen, setManageTypesOpen] = useState(false)
+  const [rewardTypes, setRewardTypes] = useState<{id: number, name: string}[]>([])
+  const [rewardStatuses, setRewardStatuses] = useState<{id: number, name: string}[]>([])
+  const [newTypeName, setNewTypeName] = useState('')
+  const [newStatusName, setNewStatusName] = useState('')
+
+  const loadRewardOptions = async () => {
+    try {
+      const [types, statuses] = await Promise.all([
+        (window.api as any).listRewardTypes?.().catch?.(() => []) ?? [],
+        (window.api as any).listRewardStatuses?.().catch?.(() => []) ?? [],
+      ])
+      if (Array.isArray(types) && types.length > 0) setRewardTypes(types)
+      else setRewardTypes(['مكافأة','تقدير','إنجاز','ابتكار','خاص'].map((n,i) => ({id:i,name:n})))
+      if (Array.isArray(statuses) && statuses.length > 0) setRewardStatuses(statuses)
+      else setRewardStatuses(['مدفوع','في الانتظار','معتمد'].map((n,i) => ({id:i,name:n})))
+    } catch {
+      setRewardTypes(['مكافأة','تقدير','إنجاز','ابتكار','خاص'].map((n,i) => ({id:i,name:n})))
+      setRewardStatuses(['مدفوع','في الانتظار','معتمد'].map((n,i) => ({id:i,name:n})))
+    }
+  }
+
+  useEffect(() => { loadRewardOptions() }, [])
+
   // Drawer states
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editRow, setEditRow] = useState<Reward | null>(null)
   const [viewOpen, setViewOpen] = useState(false)
   const [viewRow, setViewRow] = useState<Reward | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
+  const [syncingId, setSyncingId] = useState<number | null>(null)
 
   const refetch = async () => {
     setLoading(true)
@@ -95,11 +125,9 @@ export function RewardsPage() {
 
   const loadEmployees = async () => {
     try {
-      const result = await window.electronAPI?.db?.employees?.findAll?.()
+      const result = await window.electronAPI?.listEmployees?.()
       if (Array.isArray(result)) {
         setEmployees(result)
-      } else if (result?.success && result.data) {
-        setEmployees(result.data)
       }
     } catch (error) {
       console.error('Failed to load employees:', error)
@@ -131,6 +159,24 @@ export function RewardsPage() {
     refetch()
   }
 
+  const handleSyncToPayroll = async (reward: Reward) => {
+    setSyncingId(reward.id)
+    try {
+      const result = await (window.electronAPI as any).rewardSyncToPayroll?.(reward.id)
+      if (result?.success) {
+        toast.success(`تمت إضافة المكافأة لراتب ${result.period ?? reward.payroll_month}`)
+        refetch()
+      } else {
+        toast.error(result?.message || 'حدث خطأ أثناء إضافة المكافأة للراتب')
+      }
+    } catch (error) {
+      console.error('Sync error:', error)
+      toast.error('حدث خطأ أثناء إضافة المكافأة للراتب')
+    } finally {
+      setSyncingId(null)
+    }
+  }
+
   const handleConfirmDelete = async () => {
     if (!confirmDeleteId) return
 
@@ -150,16 +196,12 @@ export function RewardsPage() {
     }
   }
 
-  // Format currency based on current view
-  const formatAmount = (amountUsd?: number) => {
+  // Format currency based on reward's own currency
+  const formatAmount = (amountUsd?: number, rewardCurrency?: string) => {
     if (!amountUsd) return 'غير مالي'
-
-    if (currencyView === 'USD') {
-      return formatCurrency(amountUsd, 'USD')
-    } else {
-      const amountTRY = amountUsd * (activeRate || 34.0)
-      return formatCurrency(amountTRY, 'TRY')
-    }
+    const currency = rewardCurrency || 'USD'
+    const symbol = currency === 'TRY' ? '₺' : '$'
+    return `${symbol} ${Number(amountUsd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
 
   // Stats calculations
@@ -184,16 +226,25 @@ export function RewardsPage() {
           <h1 className="text-2xl font-bold text-gray-900">المكافآت والتقدير</h1>
           <p className="text-gray-600">إدارة مكافآت وتقدير الموظفين</p>
         </div>
-        <Button
-          onClick={() => {
-            setEditRow(null)
-            setDrawerOpen(true)
-          }}
-          className="bg-blue-600 hover:bg-blue-700 text-white"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          إضافة مكافأة جديدة
-        </Button>
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            onClick={() => setManageTypesOpen(true)}
+          >
+            <Settings className="w-4 h-4 mr-2" />
+            إدارة الأنواع
+          </Button>
+          <Button
+            onClick={() => {
+              setEditRow(null)
+              setDrawerOpen(true)
+            }}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            إضافة مكافأة جديدة
+          </Button>
+        </div>
       </div>
 
       {/* Statistics Cards */}
@@ -269,11 +320,9 @@ export function RewardsPage() {
             onChange={(e) => setKindFilter(e.target.value || undefined)}
           >
             <option value="">كل الأنواع</option>
-            <option value="مكافأة">مكافأة</option>
-            <option value="تقدير">تقدير</option>
-            <option value="إنجاز">إنجاز</option>
-            <option value="ابتكار">ابتكار</option>
-            <option value="خاص">خاص</option>
+            {rewardTypes.map(t => (
+              <option key={t.id} value={t.name}>{t.name}</option>
+            ))}
           </select>
         </div>
       </div>
@@ -294,9 +343,6 @@ export function RewardsPage() {
                   العنوان
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  الفئة
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   الحالة
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -313,7 +359,7 @@ export function RewardsPage() {
             <tbody className="bg-white divide-y divide-gray-200">
               {rewards.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                     لا توجد مكافآت مسجلة
                   </td>
                 </tr>
@@ -339,9 +385,7 @@ export function RewardsPage() {
                         </div>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {reward.category}
-                    </td>
+
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(reward.status)}`}>
                         {reward.status}
@@ -351,7 +395,7 @@ export function RewardsPage() {
                       {reward.reward_date}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {formatAmount(reward.amount_usd)}
+                      {formatAmount(reward.amount_usd, reward.reward_currency)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
@@ -376,6 +420,19 @@ export function RewardsPage() {
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
+                        {reward.payroll_action === 'payroll' && !reward.payroll_synced && (
+                          <button
+                            title="إضافة للراتب"
+                            disabled={syncingId === reward.id}
+                            onClick={(e) => { e.stopPropagation(); handleSyncToPayroll(reward); }}
+                            className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded transition-colors disabled:opacity-50"
+                          >
+                            <RefreshCw className={`w-4 h-4 ${syncingId === reward.id ? 'animate-spin' : ''}`} />
+                          </button>
+                        )}
+                        {reward.payroll_action === 'payroll' && !!reward.payroll_synced && (
+                          <span className="text-xs text-emerald-600 font-medium">✓ مضاف</span>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -432,10 +489,12 @@ export function RewardsPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">العنوان</label>
                   <p className="text-sm text-gray-900">{viewRow.title}</p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">الفئة</label>
-                  <p className="text-sm text-gray-900">{viewRow.category}</p>
-                </div>
+                {viewRow.notes && (
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">ملاحظات</label>
+                    <p className="text-sm text-gray-900">{viewRow.notes}</p>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">التاريخ</label>
                   <p className="text-sm text-gray-900">{viewRow.reward_date}</p>
@@ -448,7 +507,7 @@ export function RewardsPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">المبلغ</label>
-                  <p className="text-sm text-gray-900 font-semibold">{formatAmount(viewRow.amount_usd)}</p>
+                  <p className="text-sm text-gray-900 font-semibold">{formatAmount(viewRow.amount_usd, viewRow.reward_currency)}</p>
                 </div>
                 {viewRow.description && (
                   <div className="col-span-2">
@@ -484,6 +543,138 @@ export function RewardsPage() {
         confirmText="حذف"
         cancelText="إلغاء"
       />
+
+      {/* Manage Types Modal */}
+      {manageTypesOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h2 className="text-xl font-bold text-gray-900">إدارة أنواع المكافآت والحالات</h2>
+              <button onClick={() => setManageTypesOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-8">
+              {/* Reward Types */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">أنواع المكافآت</h3>
+                <div className="space-y-2 mb-4">
+                  {rewardTypes.map(t => (
+                    <div key={t.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2">
+                      <span className="text-gray-900">{t.name}</span>
+                      <button
+                        onClick={async () => {
+                          await (window.api as any).deleteRewardType?.(t.id)
+                          toast.success('تم الحذف')
+                          loadRewardOptions()
+                        }}
+                        className="text-red-500 hover:text-red-700 text-sm"
+                      >
+                        حذف
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="نوع مكافأة جديد..."
+                    value={newTypeName}
+                    onChange={e => setNewTypeName(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Enter' && newTypeName.trim()) {
+                        try {
+                          await (window.api as any).createRewardType?.({ name: newTypeName.trim() })
+                          toast.success('تمت الإضافة')
+                          setNewTypeName('')
+                          loadRewardOptions()
+                        } catch (err: any) { toast.error(err.message) }
+                      }
+                    }}
+                  />
+                  <Button
+                    onClick={async () => {
+                      if (!newTypeName.trim()) return
+                      try {
+                        await (window.api as any).createRewardType?.({ name: newTypeName.trim() })
+                        toast.success('تمت الإضافة')
+                        setNewTypeName('')
+                        loadRewardOptions()
+                      } catch (err: any) { toast.error(err.message) }
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    إضافة
+                  </Button>
+                </div>
+              </div>
+
+              {/* Reward Statuses */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">أنواع الحالات</h3>
+                <div className="space-y-2 mb-4">
+                  {rewardStatuses.map(s => (
+                    <div key={s.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2">
+                      <span className="text-gray-900">{s.name}</span>
+                      <button
+                        onClick={async () => {
+                          await (window.api as any).deleteRewardStatus?.(s.id)
+                          toast.success('تم الحذف')
+                          loadRewardOptions()
+                        }}
+                        className="text-red-500 hover:text-red-700 text-sm"
+                      >
+                        حذف
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="حالة جديدة..."
+                    value={newStatusName}
+                    onChange={e => setNewStatusName(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Enter' && newStatusName.trim()) {
+                        try {
+                          await (window.api as any).createRewardStatus?.({ name: newStatusName.trim() })
+                          toast.success('تمت الإضافة')
+                          setNewStatusName('')
+                          loadRewardOptions()
+                        } catch (err: any) { toast.error(err.message) }
+                      }
+                    }}
+                  />
+                  <Button
+                    onClick={async () => {
+                      if (!newStatusName.trim()) return
+                      try {
+                        await (window.api as any).createRewardStatus?.({ name: newStatusName.trim() })
+                        toast.success('تمت الإضافة')
+                        setNewStatusName('')
+                        loadRewardOptions()
+                      } catch (err: any) { toast.error(err.message) }
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    إضافة
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end p-6 border-t">
+              <Button onClick={() => setManageTypesOpen(false)} className="bg-blue-600 hover:bg-blue-700 text-white">
+                إغلاق
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

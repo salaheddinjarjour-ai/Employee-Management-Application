@@ -117,9 +117,9 @@ export function UsersPage() {
     if (loading) {
         return (
             <div className="space-y-6">
-                <h1 className="text-2xl font-bold text-foreground">إدارة المستخدمين</h1>
+                <h1 className="text-2xl font-bold text-gray-900">إدارة المستخدمين</h1>
                 <div className="flex items-center justify-center h-64">
-                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
                 </div>
             </div>
         )
@@ -129,7 +129,7 @@ export function UsersPage() {
         <div className="space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold text-foreground">إدارة المستخدمين</h1>
+                <h1 className="text-2xl font-bold text-gray-900">إدارة المستخدمين</h1>
                 <Button onClick={() => { setSelectedUser(null); setShowUserModal(true) }}>
                     <Plus className="w-4 h-4 ml-2" />
                     إضافة مستخدم
@@ -137,32 +137,32 @@ export function UsersPage() {
             </div>
 
             {/* Users Table */}
-            <div className="bg-card rounded-lg shadow-sm border border-border overflow-hidden">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full">
-                        <thead className="bg-muted/50 border-b border-border">
+                        <thead className="bg-gray-50 border-b border-gray-200">
                             <tr>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                                     اسم المستخدم
                                 </th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                                     الصلاحية
                                 </th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                                     الحالة
                                 </th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                                     آخر تسجيل دخول
                                 </th>
-                                <th className="px-6 py-3 text-center text-xs font-medium text-muted-foreground uppercase">
+                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
                                     الإجراءات
                                 </th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-border">
+                        <tbody className="divide-y divide-gray-200">
                             {users.map((user) => (
-                                <tr key={user.id} className="hover:bg-muted/50 transition-colors">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">
+                                <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                         {user.username}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -188,7 +188,7 @@ export function UsersPage() {
                                             {user.is_active ? 'نشط' : 'معطل'}
                                         </button>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                         {formatDate(user.last_login)}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-center">
@@ -221,7 +221,7 @@ export function UsersPage() {
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => setDeleteConfirm(user.id)}
-                                                className="text-destructive hover:text-destructive"
+                                                className="text-red-600 hover:text-red-700"
                                                 title="حذف"
                                             >
                                                 <Trash2 className="w-4 h-4" />
@@ -264,15 +264,15 @@ export function UsersPage() {
             {/* Reset Password Modal */}
             {resetPasswordUser && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-card rounded-lg max-w-md w-full p-6 shadow-xl border border-border">
-                        <h3 className="text-lg font-bold text-foreground mb-4 text-right">
+                    <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-xl border border-gray-200">
+                        <h3 className="text-lg font-bold text-gray-900 mb-4 text-right">
                             إعادة تعيين كلمة المرور: {resetPasswordUser.username}
                         </h3>
                         <input
                             type="password"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground mb-4 text-right"
+                            className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 mb-4 text-right"
                             placeholder="كلمة المرور الجديدة (8 أحرف على الأقل)"
                         />
                         <div className="flex gap-3">

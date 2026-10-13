@@ -12,6 +12,7 @@ export const absenceSchema = z.object({
   status: z.string().optional().default('reported'),
   notes: z.string().optional().default(''),
   fine_amount: z.coerce.number().min(0).optional().default(0),
+  fine_currency: z.string().optional().default('TRY'),
   penalty_applied: z.boolean().optional().default(false),
   penalty_amount: z.coerce.number().min(0).optional().default(0),
   reported_by: z.string().optional().default(''),

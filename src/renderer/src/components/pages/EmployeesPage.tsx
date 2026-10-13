@@ -7,17 +7,23 @@ import { EmployeeDetails } from '../EmployeeDetails'
 import ActionsBar from '../table/ActionsBar'
 import Confirm from '../ui/Confirm'
 import EmployeeDrawer from '../../features/employees/EmployeeDrawer'
-import { Plus, Edit, Upload, Eye, FileSpreadsheet, Download, Paperclip } from 'lucide-react'
+import { Plus, Edit, Upload, Eye, FileSpreadsheet, Download, Paperclip, Search } from 'lucide-react'
 
 interface Employee {
   id: number
   employee_no: string
   full_name: string
   email: string
-  department: string
-  job_title: string
   status: string
+  hire_date?: string
+  salary_grade_id?: number
   attachments_count?: number
+  roles?: {
+    role_type: string
+    entity_name: string
+    job_title?: string
+    is_primary: boolean
+  }[]
 }
 
 export function EmployeesPage() {
@@ -31,6 +37,7 @@ export function EmployeesPage() {
   const [detailsEmployee, setDetailsEmployee] = useState<Employee | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [profileEmployeeId, setProfileEmployeeId] = useState<number | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
 
   // Load employees from database
   useEffect(() => {
@@ -73,8 +80,8 @@ export function EmployeesPage() {
 
   const handleExportEmployees = async () => {
     try {
-      // Use the new export handler
-      const result = await window.api.invoke('employees:export', {})
+      // Use the new export handler natively via electronAPI
+      const result = await window.electronAPI.exportEmployees({})
 
       if (result.success) {
         const message = `تم تصدير ${result.count} موظف بنجاح إلى: ${result.filePath}`
@@ -185,24 +192,44 @@ export function EmployeesPage() {
     )
   }
 
+  // Handle instant search filtering
+  const filteredEmployees = employees.filter(emp => {
+    if (!searchTerm) return true
+    const term = searchTerm.toLowerCase()
+
+    // Check primary fields
+    if (emp.full_name?.toLowerCase().includes(term)) return true
+    if (emp.employee_no?.toLowerCase().includes(term)) return true
+
+    // Check roles array
+    if (emp.roles && emp.roles.length > 0) {
+      if (emp.roles.some(r => r.entity_name?.toLowerCase().includes(term) || r.job_title?.toLowerCase().includes(term))) {
+        return true
+      }
+    }
+
+    return false
+  })
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-foreground">الموظفون</h1>
+
+        <div className="flex-1 max-w-md mx-4">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="ابحث بالاسم، القسم، الوحدة، المسمى الوظيفي..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-4 pr-10 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            />
+          </div>
+        </div>
+
         <div className="flex items-center space-x-reverse space-x-3">
-          <Button variant="outline" onClick={handleExportEmployees}>
-            <Download className="w-4 h-4 ml-2" />
-            تصدير الموظفين
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setShowExcelImport(true)}
-            title="استيراد نموذج الرواتب من ملف Excel - يتضمن البيانات الأساسية والبدلات والخصومات لكل موظف"
-            className="hover:bg-blue-50"
-          >
-            <FileSpreadsheet className="w-4 h-4 ml-2" />
-            استيراد نموذج الرواتب
-          </Button>
           <Button
             onClick={handleAddEmployee}
             className="bg-primary hover:bg-primary/90 text-primary-foreground"
@@ -226,13 +253,7 @@ export function EmployeesPage() {
                   الاسم الكامل
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  القسم
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  الوحدة
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  المسمى الوظيفي
+                  الأدوار والأقسام
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   المرفقات
@@ -246,7 +267,7 @@ export function EmployeesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {employees.map((employee) => (
+              {filteredEmployees.map((employee) => (
                 <tr key={employee.id} className="hover:bg-muted/50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">
                     {employee.employee_no}
@@ -254,14 +275,34 @@ export function EmployeesPage() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
                     {employee.full_name}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
-                    {employee.department}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
-                    {(employee as any).unit || '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
-                    {employee.job_title}
+                  <td className="px-6 py-4 text-sm text-foreground">
+                    <div className="flex flex-col space-y-2">
+                      {employee.roles && employee.roles.length > 0 ? (
+                        <>
+                          {employee.roles.filter(r => r.is_primary).map((r, i) => (
+                            <div key={`primary-${i}`} className="flex items-center space-x-reverse space-x-2">
+                              <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded text-xs border border-blue-100 placeholder-hide shrink-0">أساسي</span>
+                              <span className="font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded text-xs border border-gray-200 shrink-0">
+                                {r.role_type === 'committee' ? 'لجنة' : r.role_type === 'unit' ? 'وحدة' : 'قسم'}
+                              </span>
+                              {r.job_title && <span className="text-gray-900 font-medium">{r.job_title}</span>}
+                              <span className="text-gray-500 text-xs truncate max-w-[120px]" title={r.entity_name}>- {r.entity_name}</span>
+                            </div>
+                          ))}
+                          {employee.roles.filter(r => !r.is_primary).map((r, i) => (
+                            <div key={`backup-${i}`} className="flex items-center space-x-reverse space-x-2">
+                              <span className="font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded text-xs border border-gray-200 shrink-0">
+                                {r.role_type === 'committee' ? 'لجنة' : r.role_type === 'unit' ? 'وحدة' : 'قسم'}
+                              </span>
+                              {r.job_title && <span className="text-gray-700">{r.job_title}</span>}
+                              <span className="text-gray-500 text-xs truncate max-w-[120px]" title={r.entity_name}>- {r.entity_name}</span>
+                            </div>
+                          ))}
+                        </>
+                      ) : (
+                        <span className="text-gray-500 text-xs italic">لا توجد أدوار مسندة</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <button
@@ -346,9 +387,9 @@ export function EmployeesPage() {
       {/* Employee Details Drawer */}
       {showEmployeeDetails && detailsEmployee && (
         <EmployeeDetails
-          employee={detailsEmployee}
+          employee={detailsEmployee as any}
           onClose={() => setShowEmployeeDetails(false)}
-          onEdit={handleEditFromDetails}
+          onEdit={handleEditFromDetails as any}
           mode="drawer"
         />
       )}

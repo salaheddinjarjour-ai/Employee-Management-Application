@@ -1,4 +1,4 @@
-import { query, queryOne } from '../mssql-connection'
+import { query, queryOne } from '../connection'
 
 export type NewReward = {
   employee_id: number
@@ -14,29 +14,29 @@ export type NewReward = {
 export default {
   async list(filters?: { kind?: string; status?: string; from?: string; to?: string }) {
     console.log('[rewardsRepo] Finding rewards with filters:', filters)
-    
+
     const where: string[] = []
     const params: any = {}
-    
-    if (filters?.kind) { 
+
+    if (filters?.kind) {
       where.push('r.kind = @kind')
       params.kind = filters.kind
     }
-    if (filters?.status) { 
+    if (filters?.status) {
       where.push('r.status = @status')
       params.status = filters.status
     }
-    if (filters?.from) { 
+    if (filters?.from) {
       where.push('r.reward_date >= @from')
       params.from = filters.from
     }
-    if (filters?.to) { 
+    if (filters?.to) {
       where.push('r.reward_date <= @to')
       params.to = filters.to
     }
 
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : ''
-    
+
     const sql = `
       SELECT r.*, e.full_name AS employee_name
       FROM rewards r
@@ -44,7 +44,7 @@ export default {
       ${clause}
       ORDER BY r.reward_date DESC, r.id DESC
     `
-    
+
     const result = await query(sql, params)
     console.log('[rewardsRepo] Found', result.recordset.length, 'rewards')
     return result.recordset
@@ -80,7 +80,7 @@ export default {
 
   async update(id: number, data: Partial<NewReward>) {
     console.log('[rewardsRepo] Updating reward with ID:', id, 'data:', data)
-    
+
     const fields = Object.keys(data)
     if (fields.length === 0) return this.findById(id)
 
@@ -108,13 +108,13 @@ export default {
   // ---------- Stats for dashboard ----------
   async stats() {
     console.log('[rewardsRepo] Getting reward statistics')
-    
+
     const totalsSql = `
       SELECT
         COUNT(*) AS total,
         COALESCE(SUM(CASE WHEN status=N'مدفوع' THEN amount_usd ELSE 0 END), 0) AS paid_amount,
         COALESCE(SUM(CASE WHEN status=N'في الانتظار' THEN amount_usd ELSE 0 END), 0) AS pending_amount,
-        SUM(CASE WHEN reward_date LIKE FORMAT(GETDATE(), 'yyyy-MM') + '%' THEN 1 ELSE 0 END) AS this_month_count
+        SUM(CASE WHEN reward_date LIKE strftime('%Y-%m', 'now') || '%' THEN 1 ELSE 0 END) AS this_month_count
       FROM rewards
     `
 

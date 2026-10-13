@@ -1,5 +1,5 @@
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 export async function fetchApi(endpoint: string, options: RequestInit = {}) {
     const url = `${BASE_URL}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`;

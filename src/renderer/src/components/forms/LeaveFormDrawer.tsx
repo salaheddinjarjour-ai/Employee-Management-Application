@@ -18,14 +18,35 @@ export function LeaveFormDrawer({ open, onClose, initial, onSaved }: {
   const [form, setForm] = useState({
     employeeId: initial?.employee_id ? Number(initial.employee_id) : null as number | null,
     employeeName: initial?.employee_name ?? '',
-    type: initial?.leave_type ?? 'سنوية',
+    type: initial?.leave_type ?? '',
     reason: initial?.reason ?? '',
     fromDate: (initial?.start_date || initial?.from_date) ?? '',
     toDate: (initial?.end_date || initial?.to_date) ?? '',
     days: initial?.days_count ? Number(initial.days_count) : 0,
-    status: initial?.status ?? 'في الانتظار',
+    status: initial?.status ?? '',
   })
   const [saving, setSaving] = useState(false)
+  const [leaveTypes, setLeaveTypes] = useState<{id: number, name: string}[]>([])
+  const [leaveStatuses, setLeaveStatuses] = useState<{id: number, name: string}[]>([])
+
+  useEffect(() => {
+    window.electronAPI.invoke('leaves:list-types').then((types: any[]) => {
+      setLeaveTypes(types)
+      if (types.length > 0 && !form.type) {
+        setForm(p => ({ ...p, type: p.type || types[0].name }))
+      }
+    }).catch(() => {
+      setLeaveTypes(['سنوية','مرضية','طارئة','بدون راتب','أمومة','أبوة','أخرى'].map((n,i) => ({id:i,name:n})))
+    })
+    window.electronAPI.invoke('leaves:list-statuses').then((statuses: any[]) => {
+      setLeaveStatuses(statuses)
+      if (statuses.length > 0 && !form.status) {
+        setForm(p => ({ ...p, status: p.status || statuses[0].name }))
+      }
+    }).catch(() => {
+      setLeaveStatuses(['في الانتظار','معتمد','مرفوض'].map((n,i) => ({id:i,name:n})))
+    })
+  }, [])
 
   // Convert from any picker format to ISO YYYY-MM-DD
   function toISO(input: string | Date | null): string {
@@ -50,12 +71,12 @@ export function LeaveFormDrawer({ open, onClose, initial, onSaved }: {
       setForm({
         employeeId: initial?.employee_id ? Number(initial.employee_id) : null,
         employeeName: initial?.employee_name ?? '',
-        type: initial?.leave_type ?? 'سنوية',
+        type: initial?.leave_type ?? (leaveTypes[0]?.name || 'سنوية'),
         reason: initial?.reason ?? '',
         fromDate: toISO((initial?.start_date || initial?.from_date)),
         toDate: toISO((initial?.end_date || initial?.to_date)),
         days: initial?.days_count ? Number(initial.days_count) : 0,
-        status: initial?.status ?? 'في الانتظار',
+        status: initial?.status ?? (leaveStatuses[0]?.name || 'في الانتظار'),
       })
     }
   }, [open, initial])
@@ -145,13 +166,10 @@ export function LeaveFormDrawer({ open, onClose, initial, onSaved }: {
             value={form.type}
             onChange={(e) => setForm(p => ({ ...p, type: e.target.value }))}
           >
-            <option value="سنوية">سنوية</option>
-            <option value="مرضية">مرضية</option>
-            <option value="طارئة">طارئة</option>
-            <option value="بدون راتب">بدون راتب</option>
-            <option value="أمومة">أمومة</option>
-            <option value="أبوة">أبوة</option>
-            <option value="أخرى">أخرى</option>
+            {leaveTypes.map(t => (
+              <option key={t.id} value={t.name}>{t.name}</option>
+            ))}
+            {leaveTypes.length === 0 && <option value="سنوية">سنوية</option>}
           </select>
         </div>
 
@@ -198,9 +216,10 @@ export function LeaveFormDrawer({ open, onClose, initial, onSaved }: {
             value={form.status}
             onChange={(e) => setForm(p => ({ ...p, status: e.target.value }))}
           >
-            <option value="في الانتظار">في الانتظار</option>
-            <option value="معتمد">معتمد</option>
-            <option value="مرفوض">مرفوض</option>
+            {leaveStatuses.map(s => (
+              <option key={s.id} value={s.name}>{s.name}</option>
+            ))}
+            {leaveStatuses.length === 0 && <option value="في الانتظار">في الانتظار</option>}
           </select>
         </div>
 

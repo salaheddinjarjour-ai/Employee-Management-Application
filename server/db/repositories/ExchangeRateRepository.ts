@@ -1,4 +1,4 @@
-import { query, queryOne, getConnection, sql } from '../mssql-connection'
+import { query, queryOne, getConnection, sql } from '../connection'
 import { ExchangeRate, CreateExchangeRate, UpdateExchangeRate } from '../types'
 
 export class ExchangeRateRepository {

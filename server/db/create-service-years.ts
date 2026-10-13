@@ -1,4 +1,4 @@
-import { query } from './mssql-connection';
+import { query } from './connection';
 
 async function createTable() {
     const sql = `

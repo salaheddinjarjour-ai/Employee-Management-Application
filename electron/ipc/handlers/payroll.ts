@@ -47,15 +47,16 @@ export const payrollHandlers = {
 
     delete: async (event: IpcMainInvokeEvent, id: number) => {
         const db = getDatabase()
+        const numId = Number(id)
         try {
             // Lines deleted via cascade if configured? 
             // SQLite safe: delete lines first then header manually to be sure
-            db.run(`DELETE FROM payroll_lines WHERE header_id = ${id}`)
-            db.run(`DELETE FROM payroll_headers WHERE id = ${id}`)
+            db.run('DELETE FROM payroll_lines WHERE header_id = ?', [numId])
+            db.run('DELETE FROM payroll_headers WHERE id = ?', [numId])
             persistDatabase()
 
             // Log audit
-            logDelete('payroll', id, `راتب رقم ${id}`)
+            logDelete('payroll', numId, `راتب رقم ${numId}`)
 
             return { success: true }
         } catch (error) {
@@ -238,32 +239,7 @@ export const payrollHandlers = {
         `, [header.id])
 
                 const lines = execToObjects(linesResult)
-
-                // Calculate totals
-                const basic = Number(header.base_min || 0)
-                const expAllowance = (Number(header.experience_allowance_amount) || 0) * (Number(header.years_of_exp) || 0)
-
-                const allowances = lines
-                    .filter((l: any) => l.category === 'allowance' || l.category === 'exception' || l.category === 'reward')
-                    .reduce((sum: number, l: any) => sum + Number(l.amount || 0), 0)
-
-                const deductions = lines
-                    .filter((l: any) => l.category === 'deduction')
-                    .reduce((sum: number, l: any) => sum + Number(l.amount || 0), 0)
-
-                const net = basic + expAllowance + allowances - deductions
-
-                return {
-                    id: header.id,
-                    employee_id: header.employee_id,
-                    period: header.period,
-                    currency: header.base_min_currency || 'TRY',
-                    base_amount: basic,
-                    additions: expAllowance + allowances,
-                    deductions,
-                    net_amount: net,
-                    created_at: header.created_at
-                }
+                return { header, lines }
             })
 
             return payrolls

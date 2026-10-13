@@ -7,7 +7,7 @@ export default defineConfig({
   server: { port: 5173, host: 'localhost', strictPort: true },
   base: './', // Use relative paths for assets
   build: {
-    outDir: '../../dist/renderer',
+    outDir: '../../dist',
     emptyOutDir: true,
   },
   resolve: {

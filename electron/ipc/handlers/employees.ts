@@ -2,6 +2,23 @@ import { IpcMainInvokeEvent } from 'electron'
 import { getDatabase, persistDatabase } from '../../database/init'
 import { logCreate, logUpdate, logDelete } from '../../utils/auditLog'
 
+async function syncRoles(db: any, employeeId: number, roles: any[]) {
+    if (!roles) return;
+    db.run('DELETE FROM employee_departments WHERE employee_id = ?', [employeeId])
+    db.run('DELETE FROM employee_units WHERE employee_id = ?', [employeeId])
+    db.run('DELETE FROM employee_committees WHERE employee_id = ?', [employeeId])
+
+    for (const r of roles) {
+        if (r.role_type === 'department' && r.entity_id) {
+            db.run('INSERT INTO employee_departments (employee_id, department_id, job_title, is_primary) VALUES (?, ?, ?, ?)', [employeeId, r.entity_id, r.job_title || null, r.is_primary ? 1 : 0])
+        } else if (r.role_type === 'unit' && r.entity_id) {
+            db.run('INSERT INTO employee_units (employee_id, unit_id, job_title, is_primary) VALUES (?, ?, ?, ?)', [employeeId, r.entity_id, r.job_title || null, r.is_primary ? 1 : 0])
+        } else if (r.role_type === 'committee' && r.entity_id) {
+            db.run('INSERT INTO employee_committees (employee_id, committee_id, role_title, is_primary) VALUES (?, ?, ?, ?)', [employeeId, r.entity_id, r.job_title || null, r.is_primary ? 1 : 0])
+        }
+    }
+}
+
 export const employeesHandlers = {
     list: async (event: IpcMainInvokeEvent, filters?: any) => {
         const db = getDatabase()
@@ -33,13 +50,55 @@ export const employeesHandlers = {
             const columns = result[0].columns
             const values = result[0].values
 
-            return values.map(row => {
+            const employees = values.map(row => {
                 const obj: any = {}
                 columns.forEach((col, idx) => {
                     obj[col] = row[idx]
                 })
                 return obj
             })
+
+            // Fetch roles for these employees from the new pivot tables
+            const employeeIds = employees.map(e => e.id)
+            if (employeeIds.length > 0) {
+                const placeholders = employeeIds.map(() => '?').join(',')
+                const multiRoleIds = [...employeeIds, ...employeeIds, ...employeeIds] // Needed 3 times for UNION ALL
+
+                const rolesSql = `
+                    SELECT ed.employee_id, 'department' as role_type, d.name as entity_name, d.id as entity_id, ed.job_title, ed.is_primary
+                    FROM employee_departments ed JOIN departments d ON ed.department_id = d.id WHERE ed.employee_id IN (${placeholders})
+                    UNION ALL
+                    SELECT eu.employee_id, 'unit' as role_type, u.name as entity_name, u.id as entity_id, eu.job_title, eu.is_primary
+                    FROM employee_units eu JOIN units u ON eu.unit_id = u.id WHERE eu.employee_id IN (${placeholders})
+                    UNION ALL
+                    SELECT ec.employee_id, 'committee' as role_type, c.name as entity_name, c.id as entity_id, ec.role_title as job_title, ec.is_primary
+                    FROM employee_committees ec JOIN committees c ON ec.committee_id = c.id WHERE ec.employee_id IN (${placeholders})
+                `
+                const rolesRes = db.exec(rolesSql, multiRoleIds)
+
+                if (rolesRes.length > 0) {
+                    const rolesCols = rolesRes[0].columns
+                    const rolesVals = rolesRes[0].values
+
+                    const roleMap: Record<number, any[]> = {}
+                    rolesVals.forEach(row => {
+                        const r: any = {}
+                        rolesCols.forEach((col, idx) => r[col] = row[idx])
+
+                        r.is_primary = Boolean(r.is_primary)
+
+                        if (!roleMap[r.employee_id]) roleMap[r.employee_id] = []
+                        roleMap[r.employee_id].push(r)
+                    })
+
+                    employees.forEach(emp => {
+                        emp.roles = roleMap[emp.id] || []
+                    })
+                } else {
+                    employees.forEach(emp => emp.roles = [])
+                }
+            }
+            return employees
         } catch (error) {
             console.error('Error listing employees:', error)
             throw error
@@ -55,7 +114,7 @@ export const employeesHandlers = {
                 WHERE deleted_at IS NULL 
                 AND (full_name LIKE ? OR employee_no LIKE ?)
                 ORDER BY CAST(employee_no AS INTEGER) ASC
-                LIMIT 20
+                LIMIT 100
             `
             const result = db.exec(sql, [`%${query_str}%`, `%${query_str}%`])
             if (result.length === 0) return []
@@ -209,6 +268,32 @@ export const employeesHandlers = {
             columns.forEach((col, idx) => {
                 obj[col] = row[idx]
             })
+
+            const rolesSql = `
+                SELECT ed.employee_id, 'department' as role_type, d.name as entity_name, d.id as entity_id, ed.job_title, ed.is_primary 
+                FROM employee_departments ed JOIN departments d ON ed.department_id = d.id WHERE ed.employee_id = ?
+                UNION ALL
+                SELECT eu.employee_id, 'unit' as role_type, u.name as entity_name, u.id as entity_id, eu.job_title, eu.is_primary 
+                FROM employee_units eu JOIN units u ON eu.unit_id = u.id WHERE eu.employee_id = ?
+                UNION ALL
+                SELECT ec.employee_id, 'committee' as role_type, c.name as entity_name, c.id as entity_id, ec.role_title as job_title, ec.is_primary 
+                FROM employee_committees ec JOIN committees c ON ec.committee_id = c.id WHERE ec.employee_id = ?
+            `
+            const rolesRes = db.exec(rolesSql, [id, id, id])
+
+            if (rolesRes.length > 0) {
+                const rolesCols = rolesRes[0].columns
+                const rolesVals = rolesRes[0].values
+                obj.roles = rolesVals.map(r => {
+                    const role: any = {}
+                    rolesCols.forEach((c, i) => role[c] = r[i])
+                    role.is_primary = Boolean(role.is_primary)
+                    return role
+                })
+            } else {
+                obj.roles = []
+            }
+
             return obj
         } catch (error) {
             console.error('Error getting employee:', error)
@@ -219,27 +304,57 @@ export const employeesHandlers = {
     create: async (event: IpcMainInvokeEvent, data: any) => {
         const db = getDatabase()
         try {
+            const errors: { field: string, message: string }[] = [];
+
+            if (!data.job_title) errors.push({ field: "job_title", message: "المسمى الوظيفي مطلوب في البيانات المرسلة" });
+            if (!data.department) errors.push({ field: "department", message: "القسم مطلوب في البيانات المرسلة" });
+            if (!data.employee_no) errors.push({ field: "employee_no", message: "رقم الموظف مطلوب" });
+
+            if (data.email) {
+                const existing = db.exec('SELECT id FROM employees WHERE email = ? COLLATE NOCASE', [data.email.trim()])
+                if (existing.length > 0 && existing[0].values.length > 0) {
+                    errors.push({ field: "email", message: "البريد الإلكتروني مستخدم مسبقاً" });
+                }
+            }
+
+            if (data.employee_no) {
+                const existingNo = db.exec('SELECT id FROM employees WHERE employee_no = ?', [data.employee_no.trim()])
+                if (existingNo.length > 0 && existingNo[0].values.length > 0) {
+                    errors.push({ field: "employee_no", message: "رقم الموظف مستخدم مسبقاً" });
+                }
+            }
+
+            if (errors.length > 0) throw new Error(JSON.stringify({ errors }));
+
+            const roles = data.roles || []
+            delete data.roles
+
             const fields = Object.keys(data)
             const placeholders = fields.map(() => '?').join(', ')
             const fieldNames = fields.join(', ')
             const values = fields.map(f => data[f])
+
+            db.exec('BEGIN TRANSACTION')
 
             db.run(`
         INSERT INTO employees (${fieldNames})
         VALUES (${placeholders})
       `, values)
 
-            persistDatabase()
-
-            // Get the last inserted ID
             const result = db.exec('SELECT last_insert_rowid() as id')
             const id = result[0].values[0][0]
+
+            await syncRoles(db, id as number, roles)
+
+            db.exec('COMMIT')
+            persistDatabase()
 
             // Log audit
             logCreate('employee', id as number, data.full_name || data.employee_no || 'موظف جديد', data)
 
-            return { id, ...data }
+            return { id, ...data, roles }
         } catch (error) {
+            try { db.exec('ROLLBACK') } catch (e) { }
             console.error('Error creating employee:', error)
             throw error
         }
@@ -248,6 +363,37 @@ export const employeesHandlers = {
     update: async (event: IpcMainInvokeEvent, id: number, data: any) => {
         const db = getDatabase()
         try {
+            const errors: { field: string, message: string }[] = [];
+
+            if (!data.job_title) errors.push({ field: "job_title", message: "المسمى الوظيفي مطلوب في البيانات المرسلة" });
+            if (!data.department) errors.push({ field: "department", message: "القسم مطلوب في البيانات المرسلة" });
+            if (!data.employee_no) errors.push({ field: "employee_no", message: "رقم الموظف مطلوب" });
+
+            if (data.email) {
+                const existing = db.exec('SELECT id FROM employees WHERE email = ? COLLATE NOCASE', [data.email.trim()])
+                if (existing.length > 0 && existing[0].values.length > 0) {
+                    const existingId = existing[0].values[0][0]
+                    if (existingId !== id) {
+                        errors.push({ field: "email", message: "البريد الإلكتروني مستخدم مسبقاً" });
+                    }
+                }
+            }
+
+            if (data.employee_no) {
+                const existingNo = db.exec('SELECT id FROM employees WHERE employee_no = ?', [data.employee_no.trim()])
+                if (existingNo.length > 0 && existingNo[0].values.length > 0) {
+                    const existingId = existingNo[0].values[0][0]
+                    if (existingId !== id) {
+                        errors.push({ field: "employee_no", message: "رقم الموظف مستخدم مسبقاً" });
+                    }
+                }
+            }
+
+            if (errors.length > 0) throw new Error(JSON.stringify({ errors }));
+
+            const roles = data.roles || []
+            delete data.roles
+
             // Get old data for audit log
             const oldResult = db.exec('SELECT * FROM employees WHERE id = ?', [id])
             let oldData: any = null
@@ -263,19 +409,25 @@ export const employeesHandlers = {
             const values = fields.map(f => data[f])
             values.push(id)
 
+            db.exec('BEGIN TRANSACTION')
+
             db.run(`
         UPDATE employees 
         SET ${setClause}, updated_at = datetime('now')
         WHERE id = ?
       `, values)
 
+            await syncRoles(db, id, roles)
+
+            db.exec('COMMIT')
             persistDatabase()
 
             // Log audit
             logUpdate('employee', id, data.full_name || oldData?.full_name || 'موظف', oldData, data)
 
-            return { id, ...data }
+            return { id, ...data, roles }
         } catch (error) {
+            try { db.exec('ROLLBACK') } catch (e) { }
             console.error('Error updating employee:', error)
             throw error
         }
@@ -317,27 +469,40 @@ export const employeesHandlers = {
 
         const db = getDatabase()
         try {
-            // Build query with filters
-            let query = 'SELECT * FROM employees WHERE deleted_at IS NULL'
+            // Build query with filters - join payroll_headers for latest salary
+            let query = `
+                SELECT e.*,
+                    COALESCE(e.basic_salary, ph.base_min) AS basic_salary
+                FROM employees e
+                LEFT JOIN (
+                    SELECT employee_id, base_min
+                    FROM payroll_headers
+                    WHERE id IN (
+                        SELECT MAX(id) FROM payroll_headers GROUP BY employee_id
+                    )
+                ) ph ON ph.employee_id = e.id
+                WHERE e.deleted_at IS NULL`
             const params: any[] = []
 
             if (filters?.search) {
-                query += ' AND (full_name LIKE ? OR employee_no LIKE ?)'
+                query += ' AND (e.full_name LIKE ? OR e.employee_no LIKE ?)'
                 params.push(`%${filters.search}%`, `%${filters.search}%`)
             }
 
             if (filters?.department) {
-                query += ' AND department = ?'
+                query += ' AND e.department = ?'
                 params.push(filters.department)
             }
 
             if (filters?.employment_status) {
-                query += ' AND employment_status = ?'
+                query += ' AND e.status = ?'
                 params.push(filters.employment_status)
             }
 
-            query += ' ORDER BY CAST(employee_no AS INTEGER) ASC'
+            query += ' ORDER BY CAST(e.employee_no AS INTEGER) ASC'
 
+            // To get the actual salary we need to join the salary_grades or get it from base_salary if it was modified
+            // In the current schema, simple select is * but let's map properties properly
             const result = db.exec(query, params)
             if (result.length === 0) {
                 return { success: false, error: 'لا توجد بيانات للتصدير' }
@@ -350,6 +515,21 @@ export const employeesHandlers = {
                 columns.forEach((col, idx) => {
                     obj[col] = row[idx]
                 })
+                // Map the generic english status to Arabic
+                if (obj.status === 'active') obj.status_ar = 'نشط'
+                else if (obj.status === 'inactive') obj.status_ar = 'غير نشط'
+                else obj.status_ar = obj.status
+
+                // Map join_date if missing, using hire_date
+                if (!obj.join_date && obj.hire_date) {
+                    obj.join_date = obj.hire_date
+                }
+
+                // Map basic_salary if missing, using base_salary
+                if (obj.base_salary !== undefined && obj.basic_salary === undefined) {
+                    obj.basic_salary = obj.base_salary
+                }
+
                 return obj
             })
 
@@ -382,8 +562,8 @@ export const employeesHandlers = {
                 { header: 'الهاتف', key: 'phone', width: 15 },
                 { header: 'البريد الإلكتروني', key: 'email', width: 25 },
                 { header: 'تاريخ التعيين', key: 'join_date', width: 15 },
-                { header: 'الراتب الأساسي', key: 'basic_salary', width: 15 },
-                { header: 'الحالة', key: 'employment_status', width: 15 }
+                { header: 'الراتب', key: 'basic_salary', width: 15 },
+                { header: 'الحالة', key: 'status_ar', width: 15 }
             ]
 
             // Add rows

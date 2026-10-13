@@ -1,4 +1,4 @@
-import { query, queryOne } from '../mssql-connection'
+import { query, queryOne } from '../connection'
 import { Attachment, CreateAttachment } from '../types'
 
 export class AttachmentRepository {

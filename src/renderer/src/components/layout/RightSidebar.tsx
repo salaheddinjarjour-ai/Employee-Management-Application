@@ -12,7 +12,6 @@ import {
   Clock,
   FileText,
   Home,
-  Upload,
   Settings,
   Calculator,
   Shield
@@ -33,6 +32,7 @@ const menuItems = [
   { id: '/service-years', label: 'سنوات الخدمة', icon: Clock },
   { id: '/exchange-rates', label: 'أسعار الصرف', icon: Calculator },
   { id: '/reports', label: 'التقارير', icon: FileText },
+  { id: '/settings', label: 'الإعدادات', icon: Settings },
 ]
 
 export function RightSidebar() {
@@ -127,16 +127,6 @@ export function RightSidebar() {
       </nav>
 
       <div className="flex-shrink-0 px-6 mt-6 pt-4 space-y-2">
-        <button
-          onClick={handleExcelImport}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-muted-foreground hover:bg-emerald-50 hover:text-emerald-700 group"
-        >
-          <div className="w-8 h-8 bg-emerald-50 rounded-md flex items-center justify-center group-hover:bg-white group-hover:shadow-sm transition-all">
-            <Upload className="w-4 h-4 text-emerald-600" />
-          </div>
-          <span className="text-sm font-medium">استيراد بيانات</span>
-        </button>
-
         <div className="px-3 py-2 text-[10px] text-muted-foreground/40 text-center font-medium">
           HR System v1.0 &copy; 2025
         </div>

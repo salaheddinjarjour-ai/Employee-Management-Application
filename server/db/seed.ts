@@ -1,4 +1,4 @@
-import { query, queryOne } from './mssql-connection'
+import { query, queryOne } from './connection'
 
 export async function seedIfEmpty() {
   const row = await queryOne('SELECT COUNT(*) as c FROM employees')

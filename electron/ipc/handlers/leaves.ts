@@ -179,5 +179,75 @@ export const leavesHandlers = {
                 recent: []
             }
         }
+    },
+
+    listTypes: async (event: IpcMainInvokeEvent) => {
+        const db = getDatabase()
+        try {
+            const result = db.exec("SELECT id, name FROM leave_types WHERE is_active = 1 ORDER BY id")
+            return execToObjects(result)
+        } catch (e) {
+            console.error('Error listing leave types:', e)
+            return ['سنوية', 'مرضية', 'طارئة', 'بدون راتب', 'أمومة', 'أبوة', 'أخرى'].map((name, id) => ({ id, name }))
+        }
+    },
+
+    createType: async (event: IpcMainInvokeEvent, data: any) => {
+        const db = getDatabase()
+        try {
+            db.run("INSERT INTO leave_types (name) VALUES (?)", [data.name])
+            persistDatabase()
+            return { success: true }
+        } catch (e: any) {
+            if (e.message?.includes('UNIQUE')) throw new Error('هذا النوع موجود مسبقاً')
+            throw e
+        }
+    },
+
+    deleteType: async (event: IpcMainInvokeEvent, id: number) => {
+        const db = getDatabase()
+        try {
+            db.run("DELETE FROM leave_types WHERE id = ?", [id])
+            persistDatabase()
+            return { success: true }
+        } catch (e) {
+            console.error('Error deleting leave type:', e)
+            throw e
+        }
+    },
+
+    listStatuses: async (event: IpcMainInvokeEvent) => {
+        const db = getDatabase()
+        try {
+            const result = db.exec("SELECT id, name FROM leave_statuses WHERE is_active = 1 ORDER BY id")
+            return execToObjects(result)
+        } catch (e) {
+            console.error('Error listing leave statuses:', e)
+            return ['في الانتظار', 'معتمد', 'مرفوض'].map((name, id) => ({ id, name }))
+        }
+    },
+
+    createStatus: async (event: IpcMainInvokeEvent, data: any) => {
+        const db = getDatabase()
+        try {
+            db.run("INSERT INTO leave_statuses (name) VALUES (?)", [data.name])
+            persistDatabase()
+            return { success: true }
+        } catch (e: any) {
+            if (e.message?.includes('UNIQUE')) throw new Error('هذه الحالة موجودة مسبقاً')
+            throw e
+        }
+    },
+
+    deleteStatus: async (event: IpcMainInvokeEvent, id: number) => {
+        const db = getDatabase()
+        try {
+            db.run("DELETE FROM leave_statuses WHERE id = ?", [id])
+            persistDatabase()
+            return { success: true }
+        } catch (e) {
+            console.error('Error deleting leave status:', e)
+            throw e
+        }
     }
 }

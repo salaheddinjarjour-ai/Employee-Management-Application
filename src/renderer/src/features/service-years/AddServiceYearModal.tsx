@@ -100,7 +100,7 @@ export function AddServiceYearModal({ open, onClose, onSuccess }: AddServiceYear
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white">
         <DialogHeader>
           <DialogTitle>إضافة سنة خدمة جديدة</DialogTitle>
           <DialogDescription>

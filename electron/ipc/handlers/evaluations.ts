@@ -46,6 +46,8 @@ export const evaluationsHandlers = {
                 SELECT ev.*, 
                        e.full_name as employee_name, 
                        e.employee_no as employee_no,
+                       e.job_title as employee_job_title,
+                       e.department as employee_department,
                        evaluator.full_name as evaluator_name
                 FROM evaluations ev
                 LEFT JOIN employees e ON ev.employee_id = e.id

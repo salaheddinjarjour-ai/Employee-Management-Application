@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '../ui/Button'
 import { Plus, Calendar, Award, TrendingUp, Users } from 'lucide-react'
 import { AddServiceYearModal } from '../../features/service-years/AddServiceYearModal'
+import { arabicUnit, AR_DAYS, AR_YEARS, AR_MONTHS } from '../../utils/format'
 
 interface ServiceRecord {
   id: number
@@ -40,83 +41,8 @@ export function ServiceYearsPage() {
     loadServiceYears()
   }, [])
 
-  // Mock data for service records (fallback)
-  useEffect(() => {
-    if (serviceRecords.length === 0 && !loading) {
-      const mockServiceRecords: ServiceRecord[] = [
-      {
-        id: 1,
-        employee_id: 2,
-        employee_name: 'سارة أحمد',
-        hire_date: '2020-01-15',
-        years_of_service: 5,
-        months_of_service: 8,
-        total_days: 2088,
-        milestones: ['سنة واحدة', '3 سنوات', '5 سنوات'],
-        benefits_eligible: ['إجازة إضافية', 'مكافأة الخدمة', 'تأمين صحي متقدم'],
-        next_milestone: '10 سنوات',
-        days_to_next_milestone: 1547
-      },
-      {
-        id: 2,
-        employee_id: 1,
-        employee_name: 'أحمد محمد علي',
-        hire_date: '2020-03-01',
-        years_of_service: 5,
-        months_of_service: 6,
-        total_days: 2028,
-        milestones: ['سنة واحدة', '3 سنوات', '5 سنوات'],
-        benefits_eligible: ['إجازة إضافية', 'مكافأة الخدمة'],
-        next_milestone: '10 سنوات',
-        days_to_next_milestone: 1607
-      },
-      {
-        id: 3,
-        employee_id: 3,
-        employee_name: 'محمد حسن',
-        hire_date: '2022-06-15',
-        years_of_service: 3,
-        months_of_service: 3,
-        total_days: 1197,
-        milestones: ['سنة واحدة', '3 سنوات'],
-        benefits_eligible: ['إجازة إضافية'],
-        next_milestone: '5 سنوات',
-        days_to_next_milestone: 633
-      },
-      {
-        id: 4,
-        employee_id: 4,
-        employee_name: 'فاطمة خالد',
-        hire_date: '2023-02-10',
-        years_of_service: 2,
-        months_of_service: 7,
-        total_days: 957,
-        milestones: ['سنة واحدة'],
-        benefits_eligible: ['تأمين صحي أساسي'],
-        next_milestone: '3 سنوات',
-        days_to_next_milestone: 138
-      },
-      {
-        id: 5,
-        employee_id: 5,
-        employee_name: 'عمر يوسف',
-        hire_date: '2024-01-20',
-        years_of_service: 1,
-        months_of_service: 8,
-        total_days: 612,
-        milestones: ['سنة واحدة'],
-        benefits_eligible: ['تأمين صحي أساسي'],
-        next_milestone: '3 سنوات',
-        days_to_next_milestone: 483
-      }
-    ]
-    
-    setTimeout(() => {
-        setServiceRecords(mockServiceRecords)
-        setLoading(false)
-      }, 500)
-    }
-  }, [loading])
+  // Show empty state if no data
+  const hasData = serviceRecords.length > 0 || loading
 
   const getMilestoneColor = (years: number) => {
     if (years >= 10) return 'bg-purple-100 text-purple-800'
@@ -137,7 +63,33 @@ export function ServiceYearsPage() {
     )
   }
 
-  const avgServiceYears = serviceRecords.reduce((sum, r) => sum + r.years_of_service, 0) / serviceRecords.length
+  const avgServiceYears = serviceRecords.length > 0
+    ? serviceRecords.reduce((sum, r) => sum + r.years_of_service, 0) / serviceRecords.length
+    : 0
+
+  if (!hasData) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">سنوات الخدمة</h1>
+          <Button onClick={() => setShowAddModal(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            إضافة سجل خدمة
+          </Button>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm border p-12 text-center">
+          <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-600 mb-2">لا توجد سجلات خدمة</h3>
+          <p className="text-sm text-gray-400">أضف سجل خدمة جديد للبدء</p>
+        </div>
+        <AddServiceYearModal
+          open={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          onSuccess={() => loadServiceYears()}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -160,7 +112,7 @@ export function ServiceYearsPage() {
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white p-6 rounded-lg shadow-sm border">
           <div className="flex items-center">
             <Calendar className="w-8 h-8 text-green-600" />
@@ -170,7 +122,7 @@ export function ServiceYearsPage() {
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white p-6 rounded-lg shadow-sm border">
           <div className="flex items-center">
             <Award className="w-8 h-8 text-purple-600" />
@@ -182,7 +134,7 @@ export function ServiceYearsPage() {
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white p-6 rounded-lg shadow-sm border">
           <div className="flex items-center">
             <TrendingUp className="w-8 h-8 text-orange-600" />
@@ -201,7 +153,7 @@ export function ServiceYearsPage() {
         <div className="px-6 py-4 border-b">
           <h3 className="text-lg font-semibold text-gray-900">سجل سنوات الخدمة</h3>
         </div>
-        
+
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
@@ -225,7 +177,7 @@ export function ServiceYearsPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-sm font-semibold rounded-full ${getMilestoneColor(record.years_of_service)}`}>
-                      {record.years_of_service} سنة و {record.months_of_service} شهر
+                      {record.years_of_service} {arabicUnit(record.years_of_service, AR_YEARS)} و {record.months_of_service} {arabicUnit(record.months_of_service, AR_MONTHS)}
                     </span>
                   </td>
                   <td className="px-6 py-4">
@@ -249,7 +201,7 @@ export function ServiceYearsPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{record.next_milestone}</div>
-                    <div className="text-xs text-gray-500">بعد {record.days_to_next_milestone} يوم</div>
+                    <div className="text-xs text-gray-500">بعد {record.days_to_next_milestone} {arabicUnit(record.days_to_next_milestone, AR_DAYS)}</div>
                   </td>
                 </tr>
               ))}
@@ -269,11 +221,11 @@ export function ServiceYearsPage() {
               { label: '3-5 سنوات', min: 3, max: 5, color: 'bg-green-600' },
               { label: '5+ سنوات', min: 5, max: 100, color: 'bg-blue-600' }
             ].map(range => {
-              const count = serviceRecords.filter(r => 
+              const count = serviceRecords.filter(r =>
                 r.years_of_service >= range.min && r.years_of_service < range.max
               ).length
               const percentage = serviceRecords.length > 0 ? (count / serviceRecords.length) * 100 : 0
-              
+
               return (
                 <div key={range.label} className="flex items-center justify-between">
                   <div className="flex items-center">
@@ -283,9 +235,9 @@ export function ServiceYearsPage() {
                   </div>
                   <div className="flex items-center">
                     <div className="w-24 bg-gray-200 rounded-full h-2 mr-2">
-                      <div 
-                        className={`${range.color} h-2 rounded-full`} 
-                        style={{width: `${percentage}%`}}
+                      <div
+                        className={`${range.color} h-2 rounded-full`}
+                        style={{ width: `${percentage}%` }}
                       ></div>
                     </div>
                     <span className="text-sm text-gray-600 w-12 text-left">
@@ -311,7 +263,7 @@ export function ServiceYearsPage() {
                     <p className="text-sm text-blue-600">{record.next_milestone}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium text-blue-800">{record.days_to_next_milestone} يوم</p>
+                    <p className="text-sm font-medium text-blue-800">{record.days_to_next_milestone} {arabicUnit(record.days_to_next_milestone, AR_DAYS)}</p>
                     <p className="text-xs text-blue-600">متبقي</p>
                   </div>
                 </div>

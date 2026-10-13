@@ -1,4 +1,4 @@
-import { query, queryOne } from '../mssql-connection'
+import { query, queryOne } from '../connection'
 
 export default {
   async findAll(filters?: any) {
@@ -18,27 +18,27 @@ export default {
 
   async create(data: any) {
     const sql = `
-      INSERT INTO departments (name, manager_id)
-      VALUES (@name, @manager_id);
+      INSERT INTO departments (name, description)
+      VALUES (@name, @description);
       SELECT SCOPE_IDENTITY() AS id;
     `
-    const result = await queryOne(sql, { 
-      name: data.name, 
-      manager_id: data.manager_id || null 
+    const result = await queryOne(sql, {
+      name: data.name,
+      description: data.description || null
     })
-    return result.id
+    return result?.id
   },
 
   async update(id: number, data: any) {
     const sql = `
       UPDATE departments
-      SET name = @name, manager_id = @manager_id
+      SET name = @name, description = @description
       WHERE id = @id
     `
-    await query(sql, { 
-      id, 
-      name: data.name, 
-      manager_id: data.manager_id || null 
+    await query(sql, {
+      id,
+      name: data.name,
+      description: data.description || null
     })
     return 1
   },

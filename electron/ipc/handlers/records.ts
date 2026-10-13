@@ -12,7 +12,10 @@ const ENTITY_TABLES: Record<string, string> = {
     courses: 'courses',
     course_enrollments: 'course_enrollments',
     service_years: 'service_years',
-    exchange_rates: 'exchange_rates'
+    exchange_rates: 'exchange_rates',
+    departments: 'departments',
+    units: 'units',
+    committees: 'committees'
 }
 
 function execToObjects(result: any[]): any[] {
@@ -38,6 +41,11 @@ export const recordsHandlers = {
         }
 
         try {
+            if (entity === 'employees') {
+                const { employeesHandlers } = await import('./employees')
+                return employeesHandlers.list(event, filters)
+            }
+
             if (entity === 'courses') {
                 const { coursesHandlers } = await import('./courses')
                 return coursesHandlers.list(event)
@@ -102,6 +110,42 @@ export const recordsHandlers = {
                 return execToObjects(result)
             }
 
+            // Special handling for leaves to include employee name via JOIN
+            if (entity === 'leaves') {
+                const result = db.exec(`
+                    SELECT l.*,
+                        COALESCE(e.full_name, l.employee_name) AS employee_name
+                    FROM leaves l
+                    LEFT JOIN employees e ON l.employee_id = e.id
+                    ORDER BY l.created_at DESC
+                `)
+                return execToObjects(result)
+            }
+
+            // Special handling for absences to include employee name via JOIN
+            if (entity === 'absences') {
+                const result = db.exec(`
+                    SELECT a.*,
+                        COALESCE(e.full_name, a.employee_name) AS employee_name
+                    FROM absences a
+                    LEFT JOIN employees e ON a.employee_id = e.id
+                    ORDER BY a.created_at DESC
+                `)
+                return execToObjects(result)
+            }
+
+            // Special handling for promotions to include employee name via JOIN
+            if (entity === 'promotions') {
+                const result = db.exec(`
+                    SELECT p.*,
+                        COALESCE(e.full_name, p.employee_name) AS employee_name
+                    FROM promotions p
+                    LEFT JOIN employees e ON p.employee_id = e.id
+                    ORDER BY p.created_at DESC
+                `)
+                return execToObjects(result)
+            }
+
             let query = `SELECT * FROM ${table}`
             const params: any[] = []
             const conditions: string[] = []
@@ -148,7 +192,33 @@ export const recordsHandlers = {
         }
     },
 
+    delete: async (event: IpcMainInvokeEvent, entity: string, id: number) => {
+        if (entity === 'employees') {
+            const { employeesHandlers } = await import('./employees')
+            return employeesHandlers.delete(event, id)
+        }
+        const db = getDatabase()
+        const table = ENTITY_TABLES[entity]
+
+        if (!table) {
+            throw new Error(`Unknown entity: ${entity}`)
+        }
+
+        try {
+            db.run(`DELETE FROM ${table} WHERE id = ${id}`)
+            persistDatabase()
+            return { success: true }
+        } catch (error) {
+            console.error(`Error deleting ${entity}:`, error)
+            throw error
+        }
+    },
+
     create: async (event: IpcMainInvokeEvent, entity: string, data: any) => {
+        if (entity === 'employees') {
+            const { employeesHandlers } = await import('./employees')
+            return employeesHandlers.create(event, data)
+        }
         if (entity === 'courses') {
             const { coursesHandlers } = await import('./courses')
             return coursesHandlers.create(data)
@@ -209,6 +279,10 @@ export const recordsHandlers = {
     },
 
     update: async (event: IpcMainInvokeEvent, entity: string, id: number, data: any) => {
+        if (entity === 'employees') {
+            const { employeesHandlers } = await import('./employees')
+            return employeesHandlers.update(event, id, data)
+        }
         if (entity === 'courses') {
             const { coursesHandlers } = await import('./courses')
             return coursesHandlers.update(event, id, data)
@@ -248,23 +322,6 @@ export const recordsHandlers = {
         }
     },
 
-    delete: async (event: IpcMainInvokeEvent, entity: string, id: number) => {
-        const db = getDatabase()
-        const table = ENTITY_TABLES[entity]
-
-        if (!table) {
-            throw new Error(`Unknown entity: ${entity}`)
-        }
-
-        try {
-            db.run(`DELETE FROM ${table} WHERE id = ${id}`)
-            persistDatabase()
-            return { success: true }
-        } catch (error) {
-            console.error(`Error deleting ${entity}:`, error)
-            throw error
-        }
-    },
 
     getLeavesStats: async () => {
         const db = getDatabase()

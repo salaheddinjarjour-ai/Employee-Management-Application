@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Button } from '../ui/Button'
-import { Plus, Clock, CheckCircle, XCircle, Edit, Eye, Trash2, Calendar } from 'lucide-react'
+import { Plus, Clock, CheckCircle, XCircle, Edit, Eye, Trash2, Calendar, Settings, X } from 'lucide-react'
 import { LeaveFormDrawer } from '../forms/LeaveFormDrawer'
 import { toast } from 'sonner'
+import { arabicUnit, AR_DAYS } from '../../utils/format'
 import Confirm from '../ui/Confirm'
 
 interface Leave {
@@ -49,6 +50,24 @@ export function LeavePage() {
   const [viewOpen, setViewOpen] = useState(false)
   const [viewRow, setViewRow] = useState<Leave | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
+
+  // Types management
+  const [manageTypesOpen, setManageTypesOpen] = useState(false)
+  const [leaveTypes, setLeaveTypes] = useState<{id: number, name: string}[]>([])
+  const [leaveStatuses, setLeaveStatuses] = useState<{id: number, name: string}[]>([])
+  const [newTypeName, setNewTypeName] = useState('')
+  const [newStatusName, setNewStatusName] = useState('')
+
+  const loadTypes = async () => {
+    const [types, statuses] = await Promise.all([
+      window.electronAPI.invoke('leaves:list-types').catch(() => []),
+      window.electronAPI.invoke('leaves:list-statuses').catch(() => [])
+    ])
+    setLeaveTypes(types)
+    setLeaveStatuses(statuses)
+  }
+
+  useEffect(() => { loadTypes() }, [])
 
   async function refetch() {
     try {
@@ -111,8 +130,23 @@ export function LeavePage() {
     }
   }
 
+  // Translation maps: DB stores English, UI shows Arabic
+  const leaveTypeLabels: Record<string, string> = {
+    'annual': 'سنوية', 'sick': 'مرضية', 'emergency': 'طارئة',
+    'unpaid': 'بدون راتب', 'maternity': 'أمومة', 'paternity': 'أبوة', 'other': 'أخرى',
+    'سنوية': 'سنوية', 'مرضية': 'مرضية', 'طارئة': 'طارئة',
+    'بدون راتب': 'بدون راتب', 'أمومة': 'أمومة', 'أبوة': 'أبوة', 'أخرى': 'أخرى'
+  }
+  const statusLabels: Record<string, string> = {
+    'pending': 'في الانتظار', 'approved': 'معتمد', 'rejected': 'مرفوض',
+    'في الانتظار': 'في الانتظار', 'معتمد': 'معتمد', 'مرفوض': 'مرفوض'
+  }
+  const translateType = (t: string) => leaveTypeLabels[t] || t
+  const translateStatus = (s: string) => statusLabels[s] || s
+
   const getLeaveTypeColor = (type: string) => {
-    switch (type) {
+    const t = translateType(type)
+    switch (t) {
       case 'سنوية': return 'bg-blue-100 text-blue-800'
       case 'مرضية': return 'bg-red-100 text-red-800'
       case 'طارئة': return 'bg-orange-100 text-orange-800'
@@ -125,7 +159,8 @@ export function LeavePage() {
   }
 
   const getStatusColor = (status: string) => {
-    switch (status) {
+    const s = translateStatus(status)
+    switch (s) {
       case 'في الانتظار': return 'bg-yellow-100 text-yellow-800'
       case 'معتمد': return 'bg-green-100 text-green-800'
       case 'مرفوض': return 'bg-red-100 text-red-800'
@@ -134,7 +169,8 @@ export function LeavePage() {
   }
 
   const getStatusIcon = (status: string) => {
-    switch (status) {
+    const s = translateStatus(status)
+    switch (s) {
       case 'معتمد': return <CheckCircle className="w-4 h-4" />
       case 'مرفوض': return <XCircle className="w-4 h-4" />
       case 'في الانتظار': return <Clock className="w-4 h-4" />
@@ -157,13 +193,23 @@ export function LeavePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">طلبات الإجازات</h1>
-        <Button
-          onClick={onAdd}
-          className="bg-blue-600 hover:bg-blue-700 text-white"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          طلب إجازة جديد +
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setManageTypesOpen(true)}
+            className="border-gray-300 text-gray-700"
+          >
+            <Settings className="w-4 h-4 mr-2" />
+            إدارة الأنواع
+          </Button>
+          <Button
+            onClick={onAdd}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            طلب إجازة جديد +
+          </Button>
+        </div>
       </div>
 
       {/* Statistics Cards */}
@@ -262,7 +308,7 @@ export function LeavePage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLeaveTypeColor(leave.leave_type)}`}>
-                        {leave.leave_type}
+                        {translateType(leave.leave_type)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -273,7 +319,7 @@ export function LeavePage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-lg font-bold text-gray-900">{leave.days_count}</span>
-                      <span className="text-sm text-gray-500 mr-1">يوم</span>
+                      <span className="text-sm text-gray-500 mr-1">{arabicUnit(Number(leave.days_count), AR_DAYS)}</span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-900 max-w-xs truncate" title={leave.reason}>
@@ -283,7 +329,7 @@ export function LeavePage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(leave.status)}`}>
                         <span className="mr-1">{getStatusIcon(leave.status)}</span>
-                        {leave.status}
+                        {translateStatus(leave.status)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
@@ -291,23 +337,23 @@ export function LeavePage() {
                         <button
                           title="تعديل"
                           onClick={(e) => { e.stopPropagation(); onEdit(leave); }}
-                          className="text-blue-600 hover:text-blue-800 text-lg"
+                          className="text-blue-600 hover:text-blue-800"
                         >
-                          ✏️
+                          <Edit className="w-5 h-5" />
                         </button>
                         <button
                           title="عرض"
                           onClick={(e) => { e.stopPropagation(); onView(leave); }}
-                          className="text-gray-600 hover:text-gray-800 text-lg"
+                          className="text-gray-600 hover:text-gray-800"
                         >
-                          👁️
+                          <Eye className="w-5 h-5" />
                         </button>
                         <button
                           title="حذف"
                           onClick={(e) => { e.stopPropagation(); onDelete(leave); }}
-                          className="text-red-600 hover:text-red-800 text-lg"
+                          className="text-red-600 hover:text-red-800"
                         >
-                          🗑️
+                          <Trash2 className="w-5 h-5" />
                         </button>
                       </div>
                     </td>
@@ -331,7 +377,7 @@ export function LeavePage() {
                 <div key={type} className="flex items-center justify-between">
                   <div className="flex items-center">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLeaveTypeColor(type)}`}>
-                      {type}
+                      {translateType(type)}
                     </span>
                     <span className="mr-2 text-sm text-gray-600">({c})</span>
                   </div>
@@ -359,15 +405,15 @@ export function LeavePage() {
           <div className="space-y-3">
             {stats?.recent?.length ? (
               stats.recent.map(request => (
-                <div key={request.id} className={`p-3 rounded-lg border-l-4 ${request.status === 'معتمد' ? 'bg-green-50 border-green-400' :
-                  request.status === 'في الانتظار' ? 'bg-yellow-50 border-yellow-400' :
-                    request.status === 'مرفوض' ? 'bg-red-50 border-red-400' :
+                <div key={request.id} className={`p-3 rounded-lg border-l-4 ${translateStatus(request.status) === 'معتمد' ? 'bg-green-50 border-green-400' :
+                  translateStatus(request.status) === 'في الانتظار' ? 'bg-yellow-50 border-yellow-400' :
+                    translateStatus(request.status) === 'مرفوض' ? 'bg-red-50 border-red-400' :
                       'bg-gray-50 border-gray-400'
                   }`}>
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium text-gray-900">{request.employee_name}</p>
-                      <p className="text-sm text-gray-600">{request.leave_type}</p>
+                      <p className="text-sm text-gray-600">{translateType(request.leave_type)}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-medium text-gray-900">{request.days_count} أيام</p>
@@ -384,17 +430,6 @@ export function LeavePage() {
           </div>
         </div>
       </div>
-
-      {/* Leave Form Drawer */}
-      <LeaveFormDrawer
-        open={drawerOpen}
-        onClose={() => {
-          setDrawerOpen(false)
-          setEditRow(null)
-        }}
-        onSaved={handleSave}
-        initial={editRow}
-      />
 
       {/* View Leave Modal */}
       {viewOpen && viewRow && (
@@ -419,7 +454,7 @@ export function LeavePage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700">نوع الإجازة</label>
                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLeaveTypeColor(viewRow.leave_type)} mt-1`}>
-                    {viewRow.leave_type}
+                    {translateType(viewRow.leave_type)}
                   </span>
                 </div>
                 <div>
@@ -432,13 +467,13 @@ export function LeavePage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">عدد الأيام</label>
-                  <p className="mt-1 text-sm text-gray-900 font-bold">{viewRow.days_count} يوم</p>
+                  <p className="mt-1 text-sm text-gray-900 font-bold">{viewRow.days_count} {arabicUnit(Number(viewRow.days_count), AR_DAYS)}</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">الحالة</label>
                   <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(viewRow.status)} mt-1`}>
                     <span className="mr-1">{getStatusIcon(viewRow.status)}</span>
-                    {viewRow.status}
+                    {translateStatus(viewRow.status)}
                   </span>
                 </div>
               </div>
@@ -481,6 +516,138 @@ export function LeavePage() {
         confirmText="حذف"
         cancelText="إلغاء"
       />
+
+      {/* Manage Types Modal */}
+      {manageTypesOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h2 className="text-xl font-bold text-gray-900">إدارة أنواع الإجازات والحالات</h2>
+              <button onClick={() => setManageTypesOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-8">
+              {/* Leave Types */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">أنواع الإجازات</h3>
+                <div className="space-y-2 mb-4">
+                  {leaveTypes.map(t => (
+                    <div key={t.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2">
+                      <span className="text-gray-900">{t.name}</span>
+                      <button
+                        onClick={async () => {
+                          await window.electronAPI.invoke('leaves:delete-type', t.id)
+                          toast.success('تم الحذف')
+                          loadTypes()
+                        }}
+                        className="text-red-500 hover:text-red-700 text-sm"
+                      >
+                        حذف
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="نوع إجازة جديد..."
+                    value={newTypeName}
+                    onChange={e => setNewTypeName(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Enter' && newTypeName.trim()) {
+                        try {
+                          await window.electronAPI.invoke('leaves:create-type', { name: newTypeName.trim() })
+                          toast.success('تمت الإضافة')
+                          setNewTypeName('')
+                          loadTypes()
+                        } catch (err: any) { toast.error(err.message) }
+                      }
+                    }}
+                  />
+                  <Button
+                    onClick={async () => {
+                      if (!newTypeName.trim()) return
+                      try {
+                        await window.electronAPI.invoke('leaves:create-type', { name: newTypeName.trim() })
+                        toast.success('تمت الإضافة')
+                        setNewTypeName('')
+                        loadTypes()
+                      } catch (err: any) { toast.error(err.message) }
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    إضافة
+                  </Button>
+                </div>
+              </div>
+
+              {/* Leave Statuses */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">أنواع الحالات</h3>
+                <div className="space-y-2 mb-4">
+                  {leaveStatuses.map(s => (
+                    <div key={s.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2">
+                      <span className="text-gray-900">{s.name}</span>
+                      <button
+                        onClick={async () => {
+                          await window.electronAPI.invoke('leaves:delete-status', s.id)
+                          toast.success('تم الحذف')
+                          loadTypes()
+                        }}
+                        className="text-red-500 hover:text-red-700 text-sm"
+                      >
+                        حذف
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="حالة جديدة..."
+                    value={newStatusName}
+                    onChange={e => setNewStatusName(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Enter' && newStatusName.trim()) {
+                        try {
+                          await window.electronAPI.invoke('leaves:create-status', { name: newStatusName.trim() })
+                          toast.success('تمت الإضافة')
+                          setNewStatusName('')
+                          loadTypes()
+                        } catch (err: any) { toast.error(err.message) }
+                      }
+                    }}
+                  />
+                  <Button
+                    onClick={async () => {
+                      if (!newStatusName.trim()) return
+                      try {
+                        await window.electronAPI.invoke('leaves:create-status', { name: newStatusName.trim() })
+                        toast.success('تمت الإضافة')
+                        setNewStatusName('')
+                        loadTypes()
+                      } catch (err: any) { toast.error(err.message) }
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    إضافة
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end p-6 border-t">
+              <Button onClick={() => setManageTypesOpen(false)} className="bg-blue-600 hover:bg-blue-700 text-white">
+                إغلاق
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

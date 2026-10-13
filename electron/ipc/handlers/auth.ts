@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { getDatabase, persistDatabase } from '../../database/init'
-import bcrypt from 'bcrypt'
+import bcrypt from 'bcryptjs'
 
 const SALT_ROUNDS = 10
 

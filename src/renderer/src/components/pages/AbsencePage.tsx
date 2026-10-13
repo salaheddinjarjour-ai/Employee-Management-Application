@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Clock, User, AlertTriangle, Calendar, MessageSquare } from 'lucide-react'
+import { Plus, Clock, User, AlertTriangle, Calendar, MessageSquare, Settings, X } from 'lucide-react'
 import { Button } from '../ui/Button'
 import ActionsBar from '../table/ActionsBar'
 import Modal from '../ui/Modal'
 import CreateEntityModal from '../form/CreateEntityModal'
 import { absenceSchema } from '../../schemas/absence'
-import { formatISODate } from '../../utils/format'
+import { formatISODate, arabicUnit, AR_HOURS } from '../../utils/format'
+import Confirm from '../ui/Confirm'
+import { toast } from 'sonner'
 
 
 interface Absence {
@@ -20,13 +22,14 @@ interface Absence {
   reason: string
   status: string
   fine_amount?: number
+  fine_currency?: string
   direct_manager_notes?: string
   hr_manager_notes?: string
   manager_notes?: string
 }
 
 // Dynamic absence form fields function
-const getAbsenceFields = () => [
+const getAbsenceFields = (absenceTypes: {id: number, name: string}[]) => [
   {
     type: 'employee-search' as const,
     name: 'employee_id',
@@ -39,29 +42,40 @@ const getAbsenceFields = () => [
     name: 'type',
     label: 'نوع الغياب/التأخير',
     required: true,
-    options: [
-      { label: 'غياب غير مبرر', value: 'unexcused' },
-      { label: 'تأخير', value: 'late' },
-      { label: 'مغادرة مبكرة', value: 'early_departure' },
-      { label: 'عدم حضور', value: 'no_show' }
-    ]
+    options: absenceTypes.length > 0
+      ? absenceTypes.map(t => ({ label: t.name, value: t.name }))
+      : [
+          { label: 'غياب غير مبرر', value: 'غياب غير مبرر' },
+          { label: 'تأخير', value: 'تأخير' },
+          { label: 'مغادرة مبكرة', value: 'مغادرة مبكرة' },
+          { label: 'عدم حضور', value: 'عدم حضور' },
+        ]
   },
   { type: 'date' as const, name: 'from_date', label: 'تاريخ البداية', required: true },
   { type: 'date' as const, name: 'to_date', label: 'تاريخ النهاية', required: true },
   { type: 'number' as const, name: 'days_count', label: 'عدد الأيام', required: true },
-  { type: 'number' as const, name: 'hours_missed', label: 'الساعات المفقودة', required: true },
-  { type: 'text' as const, name: 'reason', label: 'سبب الغياب', placeholder: 'اذكر سبب الغياب...' },
+  { type: 'number' as const, name: 'hours_missed', label: 'الساعات المفقودة (اختياري)', required: false },
+  { type: 'text' as const, name: 'reason', label: 'سبب الغياب/التأخير', placeholder: 'اذكر سبب الغياب أو التأخير...' },
   {
     type: 'number' as const,
     name: 'fine_amount',
-    label: 'الغرامة (اختياري)',
+    label: 'مبلغ الغرامة (اختياري)',
     placeholder: '0.00',
     min: 0,
     step: 0.01,
   },
+  {
+    type: 'select' as const,
+    name: 'fine_currency',
+    label: 'عملة الغرامة',
+    options: [
+      { label: '₺ ليرة تركية', value: 'TRY' },
+      { label: '$ دولار', value: 'USD' },
+    ]
+  },
   { type: 'textarea' as const, name: 'direct_manager_notes', label: 'ملاحظات المسؤول المباشر', placeholder: 'ملاحظات المسؤول المباشر...', rows: 2 },
   { type: 'textarea' as const, name: 'hr_manager_notes', label: 'ملاحظات مسؤول شؤون الموظفين', placeholder: 'ملاحظات مسؤول شؤون الموظفين...', rows: 2 },
-  { type: 'textarea' as const, name: 'manager_notes', label: 'ملاحظات المدير', placeholder: 'ملاحظات المدير...', rows: 2 },
+  { type: 'textarea' as const, name: 'manager_notes', label: 'ملاحظات المدير التنفيذي', placeholder: 'ملاحظات المدير التنفيذي...', rows: 2 },
 ]
 
 export function AbsencePage() {
@@ -71,11 +85,34 @@ export function AbsencePage() {
   const [showViewModal, setShowViewModal] = useState(false)
   const [selectedAbsence, setSelectedAbsence] = useState<Absence | null>(null)
   const [editingAbsence, setEditingAbsence] = useState<Absence | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
+
+  // Manage types state
+  const [manageTypesOpen, setManageTypesOpen] = useState(false)
+  const [absenceTypes, setAbsenceTypes] = useState<{id: number, name: string}[]>([])
+  const [newTypeName, setNewTypeName] = useState('')
+
+  const loadAbsenceTypes = async () => {
+    try {
+      const types = await (window.api as any).listAbsenceTypes?.().catch?.(() => []) ?? []
+      if (Array.isArray(types) && types.length > 0) setAbsenceTypes(types)
+      else setAbsenceTypes(['غياب غير مبرر','تأخير','مغادرة مبكرة','عدم حضور'].map((n,i) => ({id:i,name:n})))
+    } catch {
+      setAbsenceTypes(['غياب غير مبرر','تأخير','مغادرة مبكرة','عدم حضور'].map((n,i) => ({id:i,name:n})))
+    }
+  }
+
+  useEffect(() => { loadAbsenceTypes() }, [])
 
 
 
   const totalFinesTRY = useMemo(
-    () => absences.reduce((acc, absence) => acc + Number(absence.fine_amount || 0), 0),
+    () => absences.filter(a => !a.fine_currency || a.fine_currency === 'TRY').reduce((acc, absence) => acc + Number(absence.fine_amount || 0), 0),
+    [absences]
+  )
+
+  const totalFinesUSD = useMemo(
+    () => absences.filter(a => a.fine_currency === 'USD').reduce((acc, absence) => acc + Number(absence.fine_amount || 0), 0),
     [absences]
   )
 
@@ -113,10 +150,10 @@ export function AbsencePage() {
 
   const getAbsenceTypeColor = (type: string) => {
     switch (type) {
-      case 'unexcused': return 'bg-red-100 text-red-800'
-      case 'late': return 'bg-yellow-100 text-yellow-800'
-      case 'early_departure': return 'bg-orange-100 text-orange-800'
-      case 'no_show': return 'bg-red-100 text-red-800'
+      case 'unexcused': case 'غياب غير مبرر': return 'bg-red-100 text-red-800'
+      case 'late': case 'تأخير': return 'bg-yellow-100 text-yellow-800'
+      case 'early_departure': case 'مغادرة مبكرة': return 'bg-orange-100 text-orange-800'
+      case 'no_show': case 'عدم حضور': return 'bg-red-100 text-red-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
@@ -180,10 +217,16 @@ export function AbsencePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">سجل الغياب والتأخير</h1>
-        <Button onClick={() => setShowCreateModal(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          إضافة سجل غياب
-        </Button>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={() => setManageTypesOpen(true)}>
+            <Settings className="w-4 h-4 mr-2" />
+            إدارة الأنواع
+          </Button>
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            إضافة سجل غياب
+          </Button>
+        </div>
       </div>
 
 
@@ -229,7 +272,10 @@ export function AbsencePage() {
             </div>
             <div className="mr-4">
               <h3 className="text-sm font-medium text-gray-500">إجمالي الغرامات</h3>
-              <p className="text-2xl font-bold text-purple-600">₺{totalFinesTRY.toLocaleString('ar-SA')}</p>
+              <p className="text-lg font-bold text-purple-600">₺{totalFinesTRY.toLocaleString('ar-SA', { minimumFractionDigits: 2 })}</p>
+              {totalFinesUSD > 0 && (
+                <p className="text-sm font-semibold text-green-600">${totalFinesUSD.toLocaleString('ar-SA', { minimumFractionDigits: 2 })}</p>
+              )}
             </div>
           </div>
         </div>
@@ -303,7 +349,7 @@ export function AbsencePage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       {absence.fine_amount && absence.fine_amount > 0 ? (
                         <span className="inline-flex items-center rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-600">
-                          ₺{Number(absence.fine_amount).toLocaleString('ar-SA')}
+                          {absence.fine_currency === 'USD' ? '$' : '₺'}{Number(absence.fine_amount).toLocaleString('ar-SA', { minimumFractionDigits: 2 })}
                         </span>
                       ) : (
                         <span className="text-sm text-gray-400">لا توجد</span>
@@ -325,16 +371,7 @@ export function AbsencePage() {
                           setShowViewModal(true)
                         }}
                         onDelete={async () => {
-                          if (window.confirm('هل أنت متأكد من حذف هذا السجل؟')) {
-                            try {
-                              await window.electronAPI.invoke('absences:delete', absence.id)
-                              window.toast?.success?.('تم الحذف بنجاح')
-                              loadAbsences()
-                            } catch (error) {
-                              console.error('Failed to delete absence:', error)
-                              window.toast?.error?.('فشل الحذف')
-                            }
-                          }
+                          setConfirmDeleteId(absence.id)
                         }}
                       />
                     </td>
@@ -357,7 +394,7 @@ export function AbsencePage() {
         title={editingAbsence ? "تعديل سجل غياب" : "إضافة سجل غياب جديد"}
         entity="absences"
         schema={absenceSchema}
-        fields={getAbsenceFields()}
+        fields={getAbsenceFields(absenceTypes)}
         defaults={editingAbsence || {}}
         recordId={editingAbsence?.id}
         onSuccess={() => loadAbsences()}
@@ -403,7 +440,7 @@ export function AbsencePage() {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 block mb-1">الساعات المفقودة</label>
-                  <p className="text-sm text-gray-900">{selectedAbsence.hours_missed} ساعة</p>
+                  <p className="text-sm text-gray-900">{selectedAbsence.hours_missed} {arabicUnit(Number(selectedAbsence.hours_missed), AR_HOURS)}</p>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 block mb-1">الغرامة</label>
@@ -451,6 +488,98 @@ export function AbsencePage() {
         </div>
       </Modal>
 
+      <Confirm
+        open={confirmDeleteId !== null}
+        onClose={() => setConfirmDeleteId(null)}
+        onConfirm={async () => {
+          if (confirmDeleteId === null) return
+          try {
+            await window.electronAPI.invoke('absences:delete', confirmDeleteId)
+            window.toast?.success?.('تم الحذف بنجاح')
+            loadAbsences()
+          } catch (error) {
+            console.error('Failed to delete absence:', error)
+            window.toast?.error?.('فشل الحذف')
+          } finally {
+            setConfirmDeleteId(null)
+          }
+        }}
+        title="تأكيد حذف سجل الغياب"
+        message="هل أنت متأكد من حذف هذا السجل؟ لا يمكن التراجع عن هذا الإجراء."
+        confirmText="حذف نهائي"
+      />
+
+      {/* Manage Absence Types Modal */}
+      {manageTypesOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h2 className="text-xl font-bold text-gray-900">إدارة أنواع الغياب والتأخير</h2>
+              <button onClick={() => setManageTypesOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="space-y-2">
+                {absenceTypes.map(t => (
+                  <div key={t.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2">
+                    <span className="text-gray-900">{t.name}</span>
+                    <button
+                      onClick={async () => {
+                        await (window.api as any).deleteAbsenceType?.(t.id)
+                        toast.success('تم الحذف')
+                        loadAbsenceTypes()
+                      }}
+                      className="text-red-500 hover:text-red-700 text-sm"
+                    >
+                      حذف
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="نوع غياب/تأخير جديد..."
+                  value={newTypeName}
+                  onChange={e => setNewTypeName(e.target.value)}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onKeyDown={async (e) => {
+                    if (e.key === 'Enter' && newTypeName.trim()) {
+                      try {
+                        await (window.api as any).createAbsenceType?.({ name: newTypeName.trim() })
+                        toast.success('تمت الإضافة')
+                        setNewTypeName('')
+                        loadAbsenceTypes()
+                      } catch (err: any) { toast.error(err.message) }
+                    }
+                  }}
+                />
+                <Button
+                  onClick={async () => {
+                    if (!newTypeName.trim()) return
+                    try {
+                      await (window.api as any).createAbsenceType?.({ name: newTypeName.trim() })
+                      toast.success('تمت الإضافة')
+                      setNewTypeName('')
+                      loadAbsenceTypes()
+                    } catch (err: any) { toast.error(err.message) }
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  إضافة
+                </Button>
+              </div>
+            </div>
+            <div className="flex justify-end p-6 border-t">
+              <Button onClick={() => setManageTypesOpen(false)} className="bg-blue-600 hover:bg-blue-700 text-white">
+                إغلاق
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

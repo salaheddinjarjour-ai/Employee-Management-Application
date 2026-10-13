@@ -13,6 +13,8 @@ export const coursesHandlers = {
                     c.id, 
                     c.title as course_name, 
                     c.instructor as provider,
+                    c.trainer_name,
+                    c.training_org,
                     c.start_date,
                     c.end_date,
                     c.status,
@@ -54,16 +56,18 @@ export const coursesHandlers = {
 
             const courseName = data.course_name ? `'${data.course_name.replace(/'/g, "''")}'` : "'Untitled Course'"
             const provider = data.provider ? `'${data.provider.replace(/'/g, "''")}'` : "''"
+            const trainerNameCreate = data.trainer_name ? `'${data.trainer_name.replace(/'/g, "''")}'` : 'NULL'
+            const trainingOrgCreate = data.training_org ? `'${data.training_org.replace(/'/g, "''")}'` : 'NULL'
             const startDate = data.start_date ? `'${data.start_date}'` : 'NULL'
             const endDate = data.end_date ? `'${data.end_date}'` : 'NULL'
-            const status = data.status ? `'${data.status}'` : "'planned'"
+            const status = data.status ? `'${data.status}'` : "'مخطط'"
 
             console.log('[Courses Create] Prepared values:', { courseName, provider, startDate, endDate, status })
 
             // 1. Insert Course with default values for undefined fields
             db.run(`
-                INSERT INTO courses (title, instructor, start_date, end_date, status, created_at)
-                VALUES (${courseName}, ${provider}, ${startDate}, ${endDate}, ${status}, datetime('now'))
+                INSERT INTO courses (title, instructor, trainer_name, training_org, start_date, end_date, status, created_at)
+                VALUES (${courseName}, ${provider}, ${trainerNameCreate}, ${trainingOrgCreate}, ${startDate}, ${endDate}, ${status}, datetime('now'))
             `)
 
             const courseRes = db.exec('SELECT last_insert_rowid() as id')
@@ -73,7 +77,7 @@ export const coursesHandlers = {
 
             // 2. Insert Enrollment if employee selected
             if (data.employee_id) {
-                const enrollmentStatus = data.status ? `'${data.status}'` : "'enrolled'"
+                const enrollmentStatus = data.status ? `'${data.status}'` : "'مخطط'"
                 const grade = data.grade ? `'${data.grade}'` : 'NULL'
                 const result = data.result ? `'${data.result.replace(/'/g, "''")}'` : 'NULL'
 
@@ -105,31 +109,51 @@ export const coursesHandlers = {
     update: async (event: IpcMainInvokeEvent, id: number, data: any) => {
         const db = getDatabase()
         try {
-            const courseName = data.course_name ? `'${data.course_name.replace(/'/g, "''")}` : 'NULL'
+            const courseName = data.course_name ? `'${data.course_name.replace(/'/g, "''")}'` : 'NULL'
             const provider = data.provider ? `'${data.provider.replace(/'/g, "''")}'` : 'NULL'
+            const trainerName = data.trainer_name ? `'${data.trainer_name.replace(/'/g, "''")}'` : 'NULL'
+            const trainingOrg = data.training_org ? `'${data.training_org.replace(/'/g, "''")}'` : 'NULL'
             const startDate = data.start_date ? `'${data.start_date}'` : 'NULL'
             const endDate = data.end_date ? `'${data.end_date}'` : 'NULL'
             const status = data.status ? `'${data.status}'` : 'NULL'
 
             db.run(`
                 UPDATE courses SET 
-                    title = ${courseName}, instructor = ${provider}, start_date = ${startDate}, end_date = ${endDate}, status = ${status}, updated_at = datetime('now')
+                    title = ${courseName}, instructor = ${provider}, trainer_name = ${trainerName}, training_org = ${trainingOrg}, start_date = ${startDate}, end_date = ${endDate}, status = ${status}, updated_at = datetime('now')
                 WHERE id = ${id}
             `)
 
             // Update enrollment if present
-            if (data.employee_id || data.grade || data.result) {
-                const employeeId = data.employee_id || 'employee_id'
-                const grade = data.grade || 'NULL'
-                const result = data.result ? `'${data.result.replace(/'/g, "''")}'` : 'NULL'
+            if (data.employee_id || data.grade !== undefined || data.result !== undefined) {
+                const gradeVal = (data.grade !== undefined && data.grade !== '' && data.grade !== null) ? Number(data.grade) : null
+                const gradeStr = gradeVal !== null ? String(gradeVal) : 'NULL'
+                const resultStr = data.result ? `'${String(data.result).replace(/'/g, "''")}'` : 'NULL'
 
-                db.run(`
-                    UPDATE course_enrollments SET
-                        employee_id = COALESCE(${data.employee_id}, employee_id),
-                        grade = ${grade},
-                        result = ${result}
-                    WHERE course_id = ${id}
-                 `)
+                if (data.employee_id) {
+                    // Check if enrollment exists
+                    const existingEnroll = db.exec(`SELECT id FROM course_enrollments WHERE course_id = ${id} AND employee_id = ${data.employee_id}`)
+                    if (existingEnroll.length > 0 && existingEnroll[0].values.length > 0) {
+                        db.run(`
+                            UPDATE course_enrollments SET
+                                grade = ${gradeStr},
+                                result = ${resultStr}
+                            WHERE course_id = ${id} AND employee_id = ${data.employee_id}
+                        `)
+                    } else {
+                        db.run(`
+                            INSERT OR REPLACE INTO course_enrollments (course_id, employee_id, grade, result, enrollment_date)
+                            VALUES (${id}, ${data.employee_id}, ${gradeStr}, ${resultStr}, datetime('now'))
+                        `)
+                    }
+                } else {
+                    // Update any existing enrollment for this course
+                    db.run(`
+                        UPDATE course_enrollments SET
+                            grade = ${gradeStr},
+                            result = ${resultStr}
+                        WHERE course_id = ${id}
+                    `)
+                }
             }
 
             persistDatabase()

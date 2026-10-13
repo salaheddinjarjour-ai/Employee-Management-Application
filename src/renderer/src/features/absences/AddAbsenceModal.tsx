@@ -5,8 +5,9 @@ import { InputText } from '../../components/forms/InputText'
 import { InputNumber } from '../../components/forms/InputNumber'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
 import { Textarea } from '../../components/ui/textarea'
-import { useCreateRecord, useListRecords } from '../../hooks/useCreateRecord'
+import { useCreateRecord } from '../../hooks/useCreateRecord'
 import { absenceSchema, type AbsenceFormData, formatDateForDB, calculateDuration } from '../../schemas/validation'
+import { EmployeeSearchSelect } from '../../components/forms/EmployeeSearchSelect'
 
 interface AddAbsenceModalProps {
   open: boolean
@@ -15,7 +16,6 @@ interface AddAbsenceModalProps {
 }
 
 export function AddAbsenceModal({ open, onClose, onSuccess }: AddAbsenceModalProps) {
-  const [employees, setEmployees] = useState<any[]>([])
   const [employeeId, setEmployeeId] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
@@ -30,14 +30,6 @@ export function AddAbsenceModal({ open, onClose, onSuccess }: AddAbsenceModalPro
       onClose()
     }
   })
-
-  const { fetchData: fetchEmployees } = useListRecords('employees')
-
-  useEffect(() => {
-    if (open) {
-      fetchEmployees().then(setEmployees).catch(console.error)
-    }
-  }, [open, fetchEmployees])
 
   // Auto-calculate days when dates change
   useEffect(() => {
@@ -120,21 +112,11 @@ export function AddAbsenceModal({ open, onClose, onSuccess }: AddAbsenceModalPro
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-2">الموظف *</label>
-            <Select value={employeeId} onValueChange={setEmployeeId}>
-              <SelectTrigger>
-                <SelectValue placeholder="اختر الموظف" />
-              </SelectTrigger>
-              <SelectContent>
-                {employees.map((employee) => (
-                  <SelectItem key={employee.id} value={employee.id.toString()}>
-                    {employee.full_name} - {employee.employee_no}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.employee_id && (
-              <p className="text-red-500 text-sm mt-1">{errors.employee_id}</p>
-            )}
+            <EmployeeSearchSelect
+              selectedId={employeeId ? Number(employeeId) : null}
+              onSelect={(emp) => setEmployeeId(emp?.id?.toString() ?? '')}
+              error={errors.employee_id}
+            />
           </div>
 
           <div className="grid grid-cols-3 gap-4">

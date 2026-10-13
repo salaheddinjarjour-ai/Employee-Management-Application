@@ -1,5 +1,5 @@
 import React from 'react'
-import { Bell, Settings, LogOut, User } from 'lucide-react'
+import { Settings, LogOut, User } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
 import { CurrencyToggle } from '../CurrencyToggle'
@@ -28,11 +28,6 @@ export function TopBar() {
       <div className="flex items-center gap-2">
         <CurrencyToggle />
 
-        <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:bg-muted/50 hover:text-foreground rounded-full w-9 h-9">
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-destructive rounded-full ring-2 ring-card"></span>
-        </Button>
-
         <Button
           variant="ghost"
           size="icon"
@@ -54,7 +49,7 @@ export function TopBar() {
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-56 mt-2" align="end" forceMount>
+          <DropdownMenuContent className="w-56 mt-2 bg-white text-gray-900 border border-gray-200 shadow-lg" align="end" forceMount>
             <DropdownMenuLabel className="font-normal p-3">
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium leading-none text-foreground">أحمد محمد</p>

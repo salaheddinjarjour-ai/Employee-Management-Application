@@ -1,5 +1,5 @@
 appId: com.hrms.employeemanagement
-productName: Employee Management HR
+productName: نظام إدارة الموظفين
 copyright: Copyright © 2026
 
 directories:
@@ -14,9 +14,8 @@ files:
 win:
   target:
     - nsis
-    - portable
-  icon: build/icon.ico
-  artifactName: ${productName}-Setup-${version}.${ext}
+  icon: build/icon.png
+  artifactName: نظام-إدارة-الموظفين-Setup-${version}.${ext}
 
 nsis:
   oneClick: false
@@ -24,17 +23,9 @@ nsis:
   allowElevation: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
-  shortcutName: ${productName}
-  uninstallDisplayName: ${productName}
-  installerIcon: build/icon.ico
-  uninstallerIcon: build/icon.ico
-  installerHeader: build/installerHeader.bmp
-  installerSidebar: build/installerSidebar.bmp
-  license: LICENSE.txt
-  perMachine: true
+  shortcutName: نظام إدارة الموظفين
+  uninstallDisplayName: نظام إدارة الموظفين
+  perMachine: false
   runAfterFinish: true
-
-portable:
-  artifactName: ${productName}-Portable-${version}.${ext}
 
 publish: null

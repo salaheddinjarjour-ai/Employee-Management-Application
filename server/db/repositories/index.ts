@@ -7,6 +7,8 @@ import leaves from './leavesRepo'
 import absences from './absencesRepo'
 import payroll from './payrollRepo'
 import departments from './departmentsRepo'
+import units from './unitsRepo'
+import committees from './committeesRepo'
 import sections from './sectionsRepo'
 import locations from './locationsRepo'
 import holidays from './holidaysRepo'
@@ -32,6 +34,8 @@ export default {
   absences,
   payroll,
   departments,
+  units,
+  committees,
   sections,
   locations,
   holidays,

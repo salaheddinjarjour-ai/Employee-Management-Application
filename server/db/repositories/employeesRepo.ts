@@ -1,4 +1,5 @@
-import { query, queryOne } from '../mssql-connection'
+import { query, queryOne } from '../connection'
+import { employeePivotRepo, PivotRole } from './employeePivotRepo'
 
 export type NewEmployee = {
   employee_no: string
@@ -12,6 +13,7 @@ export type NewEmployee = {
   education_degree?: string | null
   category?: string | null
   grade?: string | null
+  notes?: string | null
 }
 
 function normalizeEmployeeNo(employeeNo: string): string {
@@ -33,22 +35,28 @@ export default {
 
     const sql = `
       INSERT INTO employees (
-        employee_no, full_name, hire_date, job_title, department, 
-        phone, email, status, education_degree, category, grade, created_at
+        employee_no, full_name, hire_date, job_title, department, position, 
+        phone, email, status, education_degree, category, grade, notes, created_at
       )
       VALUES (
-        @employee_no, @full_name, @hire_date, @job_title, @department,
-        @phone, @email, COALESCE(@status, 'active'), @education_degree, @category, @grade, GETDATE()
+        @employee_no, @full_name, @hire_date, @job_title, @department, @position,
+        @phone, @email, COALESCE(@status, 'active'), @education_degree, @category, @grade, @notes, GETDATE()
       );
       SELECT SCOPE_IDENTITY() AS id;
     `
 
     const result = await query(sql, {
       ...data,
+      job_title: data.job_title || null,
+      department: data.department || null,
+      position: data.job_title || 'غير محدد',
+      phone: data.phone || null,
+      email: data.email || `no-email-${data.employee_no}@system.local`,
       status: data.status || 'active',
       education_degree: data.education_degree || null,
       category: data.category || null,
-      grade: data.grade || null
+      grade: data.grade || null,
+      notes: data.notes || null
     })
 
     const id = result.recordset[0].id
@@ -66,6 +74,23 @@ export default {
 
     const result = await query(sql)
     const normalizedResult = result.recordset.map(normalizeEmployeeRecord)
+
+    // Attach roles
+    if (normalizedResult.length > 0) {
+      const ids = normalizedResult.map(e => e.id)
+      const roles = await employeePivotRepo.getRoles(ids)
+
+      const roleMap: Record<number, any[]> = {}
+      roles.forEach(r => {
+        if (!roleMap[r.employee_id]) roleMap[r.employee_id] = []
+        roleMap[r.employee_id].push(r)
+      })
+
+      normalizedResult.forEach((e: Record<string, any>) => {
+        e.roles = roleMap[e.id] || []
+      })
+    }
+
     console.log('[employeesRepo] Found', normalizedResult.length, 'employees')
     return normalizedResult
   },
@@ -77,6 +102,13 @@ export default {
     const result = await queryOne(sql, { id })
 
     const normalizedResult = normalizeEmployeeRecord(result)
+
+    // Attach roles
+    if (normalizedResult) {
+      const roles = await employeePivotRepo.getRoles([normalizedResult.id])
+      normalizedResult.roles = roles || []
+    }
+
     console.log('[employeesRepo] Found employee:', normalizedResult)
     return normalizedResult
   },
@@ -97,6 +129,17 @@ export default {
     return normalizedResult
   },
 
+  async findByEmail(email: string) {
+    console.log('[employeesRepo] Finding employee by email:', email)
+
+    const sql = 'SELECT * FROM employees WHERE email = @email'
+    const result = await queryOne(sql, { email })
+
+    const normalizedResult = normalizeEmployeeRecord(result)
+    console.log('[employeesRepo] Found employee by email:', normalizedResult ? 'Yes' : 'No')
+    return normalizedResult
+  },
+
   async upsertByEmployeeNo(data: NewEmployee): Promise<number> {
     console.log('[employeesRepo] Upserting employee by employee_no:', data.employee_no)
 
@@ -111,22 +154,30 @@ export default {
           hire_date = @hire_date,
           job_title = @job_title,
           department = COALESCE(@department, department),
+          position = COALESCE(@position, position),
           phone = COALESCE(@phone, phone),
           email = COALESCE(@email, email),
           status = COALESCE(@status, status),
           education_degree = COALESCE(@education_degree, education_degree),
           category = COALESCE(@category, category),
           grade = COALESCE(@grade, grade),
+          notes = COALESCE(@notes, notes),
           updated_at = GETDATE()
         WHERE employee_no = @employee_no
       `
 
       await query(sql, {
         ...data,
+        job_title: data.job_title || null,
+        department: data.department || null,
+        position: data.job_title || 'غير محدد',
+        phone: data.phone || null,
+        email: data.email || `no-email-${data.employee_no}@system.local`,
         status: data.status || 'active',
         education_degree: data.education_degree || null,
         category: data.category || null,
-        grade: data.grade || null
+        grade: data.grade || null,
+        notes: data.notes || null
       })
 
       return existing.id

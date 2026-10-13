@@ -68,7 +68,7 @@ export const dashboardHandlers = {
                 const exchangeResult = db.exec(`
                     SELECT rate, effective_date 
                     FROM exchange_rates 
-                    ORDER BY effective_date DESC 
+                    WHERE is_active = 1
                     LIMIT 1
                 `)
                 if (exchangeResult.length > 0 && exchangeResult[0].values.length > 0) {
@@ -200,6 +200,32 @@ export const dashboardHandlers = {
                 recentActivities = []
             }
 
+            // Absences stats for the current period
+            let absencesStats = { total: 0, finesTRY: 0, finesUSD: 0 }
+            try {
+                const absResult = db.exec(`
+                    SELECT
+                        COUNT(*) as total,
+                        COALESCE(SUM(CASE WHEN fine_currency = 'TRY' OR fine_currency IS NULL THEN COALESCE(fine_amount, 0) ELSE 0 END), 0) as fines_try,
+                        COALESCE(SUM(CASE WHEN fine_currency = 'USD' THEN COALESCE(fine_amount, 0) ELSE 0 END), 0) as fines_usd
+                    FROM absences
+                    WHERE strftime('%Y-%m', from_date) = '${targetPeriod}'
+                `)
+                if (absResult.length > 0 && absResult[0].values.length > 0) {
+                    const row = absResult[0].values[0]
+                    absencesStats = { total: Number(row[0]) || 0, finesTRY: Number(row[1]) || 0, finesUSD: Number(row[2]) || 0 }
+                }
+            } catch (e) { /* table might not exist */ }
+
+            // Leaves stats
+            let leavesStats = { pending: Number(pendingLeaves) || 0, total: 0 }
+            try {
+                const totalLeavesResult = db.exec(`SELECT COUNT(*) FROM leaves WHERE strftime('%Y-%m', from_date) = '${targetPeriod}' AND deleted_at IS NULL`)
+                if (totalLeavesResult.length > 0 && totalLeavesResult[0].values.length > 0) {
+                    leavesStats.total = Number(totalLeavesResult[0].values[0][0]) || 0
+                }
+            } catch (e) { /* table might not exist */ }
+
             const dashboardData = {
                 period: targetPeriod,
                 totals: {
@@ -213,6 +239,8 @@ export const dashboardHandlers = {
                 },
                 evaluations: evaluationsStats,
                 exchange: exchange,
+                absences: absencesStats,
+                leaves: leavesStats,
                 recent: recentActivities
             }
 
